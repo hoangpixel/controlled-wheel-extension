@@ -129,7 +129,8 @@ async function boot(config = { enabled: true, target: 'Huy' }, supported = true)
     $store: { commit(_key, value) { busy = value; } },
     spin() { if (busy) return; busy = true; wheel.click(() => {}, entry => { result = entry; busy = false; }); }
   };
-  if (supported) env.wheelContainer.__vue__ = instance;
+  if (supported === true) env.wheelContainer.__vue__ = instance;
+  if (supported === 'vue3') env.main.__vue_app__ = { _instance: { subTree: { children: [{ component: { data: { renamedEngine: { model: wheel } }, proxy: instance } }] } } };
   env.nativeSpin.addEventListener('click', () => instance.spin());
   ['wheel-core.js','native-controller.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
   ['wheel-core.js','page-reader.js','content.js'].forEach(file => env.load(file));
@@ -142,24 +143,59 @@ test('two-world bridge: native control publishes site result, creates no second 
   let status = await env.request('FWD_STATUS');
   assert.equal(status.supported, true); assert.equal(status.source, 'native');
   assert.doesNotMatch(env.ui.markup, /<canvas|<dialog/);
+  assert.doesNotMatch(env.ui.markup, /class="debug"|class="entries"|<textarea|<pre|Chỉ số mục tiêu|Góc:/);
   assert.match(env.ui.markup, /CONTROLLED DEMO/);
+  assert.equal(env.roots.at(-1).parentElement, env.doc.body);
+  assert.deepEqual(env.main.children, [env.wheelContainer, env.editor]);
   await env.nativeSpin.fire('click'); env.advance(500); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult()?.text, 'Huy'); assert.equal(env.getBusy(), false);
-  assert.match(env.ui.querySelector('.debug').textContent, /Kết quả thực tế: Huy/);
-  await env.ui.querySelector('.disable').fire('click'); await env.flush();
+  assert.equal(env.ui.querySelector('.badge').textContent, 'CONTROLLED DEMO – Kết quả định trước');
+  await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Huy' } }); await env.flush();
   assert.equal(env.roots.at(-1).isConnected, false); assert.equal(env.storage.fixedWinnerDemo.enabled, false);
   await env.nativeSpin.fire('click'); env.wheel.tick(); env.wheel.tick(); env.wheel.tick();
   assert.equal(env.wheel.randomStarts, 1);
 });
 
-test('unsupported live shape is reported and native canvas click is blocked while controlled mode is enabled', async () => {
+test('unsupported engine is reported in popup protocol, without debug on page or blocked native controls', async () => {
   const env = await boot({ enabled: true, target: 'Huy' }, false);
   const status = await env.request('FWD_STATUS');
   assert.equal(status.supported, false); assert.equal(status.available, false);
-  assert.match(env.ui.querySelector('.status').textContent, /chưa được hỗ trợ/);
+  assert.match(status.detail, /chưa được hỗ trợ/);
+  assert.equal(env.ui.querySelector('.badge').textContent, 'CONTROLLED DEMO – Chưa áp dụng');
   let stopped = false;
   env.docHandlers.click({ type: 'click', target: env.nativeCanvas, preventDefault() {}, stopImmediatePropagation() { stopped = true; } });
-  assert.equal(stopped, true);
+  assert.equal(stopped, false);
+});
+
+test('Vue 3 root subtrees and renamed nested engine fields can connect', async () => {
+  const env = await boot({ enabled: true, target: 'Đạt' }, 'vue3');
+  const status = await env.request('FWD_STATUS');
+  assert.equal(status.supported, true);
+  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  assert.equal(env.getResult().text, 'Đạt');
+});
+
+test('connection diagnostics return structure without participant values and appear only on popup request', async () => {
+  const env = await boot({ enabled: true, target: 'Huy' }, 'vue3');
+  env.doc.body.innerText = 'Version 440';
+  const report = await env.request('FWD_DIAGNOSTICS');
+  assert.equal(report.ok, true);
+  assert.equal(report.diagnostics.siteVersion, '440');
+  assert.ok(report.diagnostics.vue3Nodes > 0);
+  assert.equal(report.diagnostics.connected, true);
+  assert.doesNotMatch(JSON.stringify(report.diagnostics), /Hoàng|Huy|Đạt/);
+  env.load('popup.js'); await env.flush();
+  await env.elements.get('read-diagnostics').fire('click'); await env.flush();
+  assert.match(env.elements.get('diagnostics-output').value, /visibleCanvasCount/);
+  assert.doesNotMatch(env.ui.markup, /visibleCanvasCount|Engine:|Góc:/);
+});
+
+test('missing target does not intercept site footer/FAQ link clicks', async () => {
+  const env = await boot({ enabled: true, target: 'Absent' });
+  const link = new Element('A'); env.main.append(link); env.instance.$el = env.main;
+  let stopped = false;
+  env.docHandlers.click({ type: 'click', target: link, preventDefault() {}, stopImmediatePropagation() { stopped = true; } });
+  assert.equal(stopped, false);
 });
 
 test('popup persists normalized winner and shows native compatibility/missing-target feedback', async () => {

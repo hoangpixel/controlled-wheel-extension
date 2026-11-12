@@ -66,6 +66,15 @@
       window.close();
     } catch (error) { message(error.message, "error"); }
   });
+  $("read-diagnostics").addEventListener("click", async () => {
+    $("read-diagnostics").disabled = true;
+    try {
+      const result = await send("FWD_DIAGNOSTICS");
+      if (!result?.ok) throw new Error(result?.error || "Không đọc được chẩn đoán.");
+      $("diagnostics-output").value = JSON.stringify(result.diagnostics, null, 2);
+    } catch (error) { $("diagnostics-output").value = error.message; }
+    finally { $("read-diagnostics").disabled = false; }
+  });
   async function init() {
     busy = true;
     try {
