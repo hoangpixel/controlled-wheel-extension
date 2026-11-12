@@ -1,146 +1,87 @@
-# Fixed Winner Demo — bản 1.3.0
+# Fixed Winner Demo — Brave / Chromium
 
-Extension Manifest V3 điều khiển vòng quay gốc của wheelofnames.com trong chế độ **CONTROLLED DEMO – Kết quả định trước**. Cấu hình lưu bằng `chrome.storage.local`. Không có Canvas thứ hai, không thay chữ trong thông báo thắng cuộc.
+Extension Manifest V3, JavaScript thuần, có popup dark mode và vòng quay Canvas độc lập trên `https://wheelofnames.com/*`. Luôn hiển thị **Fixed Winner Demo** và thông tin kết quả định trước khi bật. Chỉ dùng cho mô phỏng/trình diễn có công bố kết quả định trước.
 
-Profile **v440** được viết theo các tệp production người dùng cung cấp: `EditWheelPage-v440.js`, `StaticWheel-v440.js`, `ConfettiLauncher-v440.js`, `dist-v4402.js`. Đây là thay đổi cơ chế kết nối, không chỉ tăng phạm vi quét Vue như các bản 1.2.x.
-
-Nhãn chế độ nhỏ ở góc dưới vẫn hiển thị khi bật. Đã bỏ bảng tên/chỉ số/tọa độ/debug phía trên vòng quay. Quảng cáo, FAQ và nội dung bên dưới website giữ nguyên.
-
-## Cập nhật trên Brave
+## Cài trên Brave
 
 1. Mở `brave://extensions`.
-2. Nếu đã cài, bấm **Reload** trên thẻ extension. Nếu chưa cài, bật **Developer mode** → **Load unpacked** → chọn thư mục project.
-3. **Tải lại hoàn toàn tab wheelofnames.com sau khi reload extension.** Việc này gỡ các wrapper cũ trong tab và nạp các tệp mới.
-4. Giữ tab website đang hiển thị. Nhập danh sách tên trên website.
-5. Mở popup, nhập tên mục tiêu, bấm **Save Winner**, bật **Điều khiển vòng quay gốc**.
-6. Đợi khoảng 1–3 giây để adapter nhận một khung hình của Canvas. Popup tự cập nhật trạng thái mỗi giây.
-7. Khi popup báo **Đã kết nối vòng quay gốc** và không có cảnh báo, bấm trực tiếp Canvas gốc hoặc dùng Ctrl+Enter trên website.
-8. Kim trên vòng quay gốc và thông báo thắng cuộc gốc phải cùng chỉ đúng tên đã lưu.
+2. Bật **Developer mode**.
+3. Chọn **Load unpacked**.
+4. Chọn thư mục `wheel-controller-extension` chứa `manifest.json`.
+5. Truy cập `https://wheelofnames.com/`. Nếu trang đã mở trước khi cài, tải lại trang.
+6. Mở popup extension, nhập `Hoàng`, bấm **Save Winner**, bật **Fixed Winner Demo**.
+7. Bấm **Mở vòng quay demo** trong popup hoặc nút **Fixed Winner Demo** ở góc dưới bên phải trang, rồi bấm **Spin Demo**.
 
-Tắt bằng toggle trong popup để khôi phục các phương thức quay ban đầu. Lượt đang điều khiển bị hủy và không công bố người thắng. Không cần build, cài dependency, backend hay tài khoản.
+Khi sửa mã extension: bấm Reload trên thẻ extension trong `brave://extensions`, sau đó tải lại website. Không cần build, npm install, tài khoản hay backend.
 
-## Vì sao các bản trước không kết nối được với v440
+## Danh sách và đồng bộ
 
-Mã tham khảo cũ dùng đối tượng wheel có `angle`, `speed`, `state` và `entryPicker`. Bản 440 dùng `wheelState`, các phase dạng chuỗi và callback được truyền vào constructor.
+- Mặc định đọc ô textarea/contenteditable đang hiển thị trên trang; ưu tiên trường có tên/nhãn `names`, `entries`, hoặc trình soạn thảo rich text. Không truy cập Vue store, biến riêng của website hay API bảo mật.
+- Mở tab **Entries** của website nếu không nhận diện được danh sách. Nếu có nhiều ô soạn thảo không phân biệt được, extension sẽ báo không thể đọc thay vì tự chọn một ô bất kỳ.
+- Theo dõi input/change, MutationObserver có gom sự kiện (160 ms), và kiểm tra mỗi 1,2 giây để nhận các thay đổi `.value` không phát sự kiện. Đọc lại ngay trước mỗi lượt quay. Khi tắt demo, dừng toàn bộ theo dõi và gỡ giao diện.
+- Sort/Shuffle trên website được đồng bộ theo thứ tự mới. Tên mục tiêu lưu độc lập với chỉ số, không bị đổi theo vị trí.
+- Thay đổi danh sách hoặc tên mục tiêu trong lúc quay sẽ hủy lượt quay. Đóng overlay cũng hủy lượt quay; có thể mở lại bằng nút góc trang.
+- Nếu DOM của website thay đổi, danh sách chỉ có ảnh, hoặc dùng chế độ nâng cao không đọc được: chọn **Nhập thủ công cho demo**, dán mỗi dòng một tên và bấm **Áp dụng danh sách demo**. Đây là danh sách độc lập, không sửa danh sách gốc. Danh sách thủ công được lưu trên máy; mỗi tab/reload mặc định lại về đồng bộ từ trang, cần chọn thủ công lại để dùng nó.
+- Có thể mở **Danh sách hiện tại** để kiểm tra toàn bộ tên trước khi quay. Các tên dài hoặc rất nhiều ô có thể khó đọc trên Canvas; danh sách văn bản giữ đầy đủ tên.
 
-Trong `ConfettiLauncher-v440.js`, component `SpinningWheel` tạo engine bằng `new b(...)` trong closure của `setup()`. Vue chỉ expose `spin` và `resetRotation`, nên quét `data`/`setupState` không lấy được engine đó.
+## Cơ chế chọn kết quả
 
-Class `b` chính là export `t` của `dist-v4402.js`. Bản 1.3.0 dùng đường kết nối dưới đây để lấy đúng instance đã tồn tại.
+Tên được chuẩn hóa Unicode NFC, bỏ khoảng trắng hai đầu, giữ dấu, chữ hoa/thường và khoảng trắng bên trong. `Hoàng` khác `Hoang` và `hoàng`. Nếu trùng tên, chọn ô xuất hiện đầu tiên theo thứ tự hiện tại; không gộp các ô trùng nhau.
 
-## Cách kết nối v440
+Với `N` ô bằng nhau, góc mỗi ô là `2π/N`. Tìm chỉ số `i` của tên mục tiêu trong danh sách mới nhất. Kim cố định ở phía trên (`−π/2`), nên góc dừng là `−π/2 − (i + 0,5) × 2π/N`, cộng ít nhất sáu vòng theo chiều quay. Animation dùng requestAnimationFrame, giảm tốc trong 4,8 giây (0,9 giây nếu trình duyệt yêu cầu giảm chuyển động). Kết thúc, lấy kết quả từ **ô thực sự ở dưới kim** bằng cùng hệ tọa độ; không thay chữ thông báo của website.
 
-1. Tìm component đã mount có tên `SpinningWheel`, prop `wheelConfig` và phương thức `spin` được expose.
-2. Xác nhận trang đã tải cả `ConfettiLauncher-v440.js` và `dist-v4402.js` từ cùng thư mục, cùng origin. URL có query/hash hoặc khác phiên bản bị từ chối.
-3. Trong MAIN world, gọi `import()` với **đúng URL module gốc đã được website khởi tạo**, để truy cập namespace của chính module đó. Không tạo URL cache-busting, không fetch rồi eval source, không tải bản vá từ CDN. Các import lặp lại trong cùng môi trường dùng lại module đã được đánh giá; xem [tài liệu về module caching](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import#module_namespace_object).
-4. Tạm bọc `draw()` trên prototype của class engine. Renderer gốc vẫn được gọi nguyên vẹn. Chỉ nhận instance khi context Canvas và `wheelConfig` khớp component đã tìm thấy.
-5. Gỡ wrapper prototype ngay khi nhận diện xong, hoặc sau tối đa bốn giây, hoặc khi tắt. Không sửa prototype của API trình duyệt.
-6. Kết nối Pinia store chứa đúng wheel để có thể bỏ trạng thái bận khi hủy lượt.
-7. Cài adapter trên riêng instance engine đó. Giữ nguyên renderer, Canvas, callback âm thanh đổi ô và callback thắng cuộc của website.
+Chưa chọn tên, tên bị xóa, danh sách trống hoặc không đọc được danh sách đều có cảnh báo và khóa Spin Demo. Có thể lưu tên trước khi tên đó có trong danh sách; popup báo đã lưu kèm cảnh báo, không tự thêm tên vào danh sách.
 
-Mã điều khiển extension nằm trong các tệp cục bộ của project. Việc truy cập module ở bước 3 sử dụng code gốc của website đã chạy; không phải cơ chế cập nhật/tải logic extension từ xa. Chỉ thực hiện với profile v440 đã kiểm tra và URL gốc quan sát được trong Resource Timing.
+## Phạm vi và nghiên cứu tích hợp
 
-MAIN world chịu CSP của website, theo [tài liệu Chrome](https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts#content-security-policy). Nếu trình duyệt hoặc CSP không cho truy cập module, adapter sẽ báo lỗi; không nới lỏng CSP hay cơ chế bảo mật để vượt qua lỗi đó.
+Đã tham khảo ngày 12/11/2026:
 
-Đường kết nối theo state Vue cũ vẫn được giữ cho engine tham khảo tương thích.
+- [Wheel of Names](https://wheelofnames.com/): mô tả cơ chế quay ngẫu nhiên dựa trên vật lý và `crypto.getRandomValues`.
+- [Mã Wheel.js của repo tham khảo](https://github.com/momander/wheel-spinner/blob/master/static/Wheel.js): quản lý trạng thái tăng/giảm tốc nội bộ, xác định kết quả theo ô dưới kim và callback.
+- [textboxbuttons.vue](https://github.com/momander/wheel-spinner/blob/master/static/textboxbuttons.vue): Sort/Shuffle cập nhật Vue store.
 
-## Cách chọn kết quả
+Repo tham khảo không phải bằng chứng DOM/bản triển khai hiện tại giống hệt mã đó. Không xác minh được một API công khai ổn định để ép kết quả vòng quay gốc. Một số tệp nguồn không tải được; việc kiểm tra DOM trực tiếp trên Brave bị công cụ từ chối. Vì vậy dùng phương án Canvas overlay theo yêu cầu, với adapter DOM có giới hạn được công bố và đường nhập thủ công.
 
-- Đọc lại `wheelState.visibleEntries` của engine trước mỗi lượt; không dùng vị trí cố định hoặc danh sách nhập thủ công riêng.
-- Chuẩn hóa tên bằng Unicode NFC, bỏ khoảng trắng hai đầu; giữ dấu, chữ hoa/thường và khoảng trắng bên trong. Trùng tên: chọn ô đầu tiên trong danh sách thực tế của engine.
-- Kim gốc nằm bên phải. Với `N` ô bằng nhau, tâm ô `i` tương ứng góc `i × 2π/N`.
-- Kiểm chứng tâm và hai điểm trong ô bằng các getter thật `getIndexAtPointer(angle)` và `getEntryAtAngle(angle)` của engine.
-- Wrapper `click()` bắt đầu lượt quay có giảm tốc, ít nhất sáu vòng. Wrapper `tick()` cập nhật cùng `wheelState` mà renderer gốc đọc: `angle`, `phase`, `indexAtPointer`, `entryAtPointer`, v.v.
-- Thời lượng theo cấu hình website, giới hạn 1–20 giây; chế độ giảm chuyển động dùng 0,9 giây.
-- Khi kết thúc, trạng thái đã được cập nhật thành `StoppedPhase`, ô thực tế dưới kim được kiểm tra, rồi callback constructor `doneSpinningCallback(entry)` của website được gọi đúng một lần với đúng entry thật.
-- Sort/Shuffle hoặc thay đổi danh sách được xử lý qua `configure()` của engine. Đổi mục tiêu, cấu hình hoặc danh sách giữa lượt sẽ hủy lượt cũ.
-- Khi tắt, khôi phục descriptor/phương thức gốc. `Math.random`, `crypto.getRandomValues` và các API bảo mật không bị thay đổi. Sau khi tắt, engine tiếp tục quay ngẫu nhiên bằng luồng gốc.
-
-## Phạm vi và giới hạn
-
-- Hỗ trợ profile cấu trúc v440 được cung cấp, và hợp đồng engine tham khảo cũ. Không tự áp dụng profile này cho module v441 hoặc các phiên bản chưa kiểm tra.
-- Một wheel tương thích được điều khiển tại một thời điểm. Chưa kiểm thử nhiều wheel đồng thời.
-- Danh sách văn bản hiển thị đầy đủ; trọng số bằng 1 hoặc không khai báo trọng số. Chưa hỗ trợ trọng số khác 1, chế độ chỉ hiển thị một phần danh sách, hoặc ảnh phủ thay các ô tên.
-- Nếu bật giữa một lượt quay ngẫu nhiên đang chạy, adapter đợi lượt đó kết thúc trước khi kết nối; không sửa kết quả lượt đã bắt đầu.
-- Khi chưa kết nối, nhãn ghi **Chưa áp dụng** và vòng quay gốc vẫn có thể quay ngẫu nhiên. Lưu tên thành công không chứng minh engine đã kết nối.
-- Khi đã kết nối nhưng tên/cấu hình không hợp lệ, guard chặn các thao tác quay nhận diện được. Nếu quay qua API của trang, adapter vẫn không công bố người thắng giả khi thiếu tên.
-- Không có fallback âm thầm sang Canvas riêng.
-
-## Chẩn đoán kết nối
-
-Mở popup → **Chẩn đoán kết nối** → **Đọc thông tin chẩn đoán**. Thông tin không hiện phía trên vòng quay.
-
-Bản này phải ghi `extensionVersion: "1.3.0"`. Khi đường module thành công, `connected` là `true` và `moduleLink.phase` là `captured`.
-
-Các phase thường gặp:
-
-| Phase | Ý nghĩa |
-| --- | --- |
-| `loading_module` | Đang lấy namespace module gốc đã tải |
-| `waiting_draw` | Đang đợi khung hình Canvas để nhận instance |
-| `captured` | Đã nhận instance engine |
-| `module_not_observed` | Không thấy đủ URL module v440 trong Resource Timing |
-| `module_error` | Trình duyệt/CSP hoặc export module không tương thích |
-| `draw_timeout` | Không nhận được khung hình phù hợp; giữ tab ở phía trước rồi thử lại |
-| `missing_busy_store` | Đã thấy engine nhưng chưa nối được store để hủy an toàn |
-
-Nếu vẫn lỗi sau khi reload extension và website, nội dung `moduleLink` cho biết bước kết nối nào chưa thành công. Không coi `reason: no_engine_in_accessible_state` của bộ dò Vue riêng là lỗi cuối cùng nếu module link đã kết nối được.
+Demo không nhập trọng số, màu, ảnh, âm thanh, tùy chỉnh số ô hoặc kết quả của vòng quay gốc. Các ô demo luôn bằng nhau. Đóng overlay trả quyền tương tác cho trang. Khi bật demo, nút quay gốc vẫn quay ngẫu nhiên theo website; muốn dùng kết quả định trước phải bấm **Spin Demo** trong overlay.
 
 ## Quyền và dữ liệu
 
-Chỉ có quyền `storage`, phạm vi `https://wheelofnames.com/*`. Không thêm quyền debugger, scripting, tabs hoặc toàn bộ website. Không gửi danh sách hoặc cấu hình đến máy chủ ngoài.
+Chỉ yêu cầu `storage`. Content script chỉ được khai báo cho `https://wheelofnames.com/*`, không cho subdomain, iframe hay website khác. Popup dùng tab hiện tại để trao đổi với content script; không cần quyền `tabs`, `scripting`, clipboard hoặc quyền toàn bộ website.
 
-Vẫn lưu `fixedWinnerDemo: { enabled, target }` trong `chrome.storage.local`, dùng chung giữa các tab. Các danh sách thủ công từ bản demo cũ nếu còn lưu không được dùng cho vòng quay gốc.
+Lưu `fixedWinnerDemo: { enabled, target }` và tùy chọn `fixedWinnerDemoManualNames` trong `chrome.storage.local`. Cấu hình dùng chung giữa các tab; nguồn danh sách là riêng từng tab. Không gửi dữ liệu ra ngoài, không remote code, thư viện ngoài hay ghi đè `crypto.getRandomValues`, `Math.random` hoặc hàm quay của website. Giao diện tách bằng Shadow DOM; dữ liệu tên chỉ được gán qua textContent/value hoặc vẽ Canvas.
 
-Hai execution world trao đổi cấu hình/kết quả qua `postMessage` cùng origin. MAIN không có quyền storage. Website có thể quan sát/can thiệp MAIN world; không chuyển API storage, thông tin đăng nhập hoặc dữ liệu tài khoản qua bridge.
+## Kiểm thử
 
-## Kiểm thử tự động
-
-Node.js 20+, không cần cài package:
+Yêu cầu Node.js có `node:test` (khuyến nghị Node 20+). Chạy:
 
 ```powershell
-node --test tests/demo.test.cjs tests/v440.test.cjs
-node --check native-controller-v440.js
-node --check native-module-link.js
-node --check native-controller.js
-node --check native-discovery.js
-node --check page-bridge.js
-node --check popup.js
+node --test tests/demo.test.cjs
 node --check content.js
+node --check popup.js
+node --check page-reader.js
+node --check wheel-core.js
 ```
 
-24 test đã đạt, gồm:
+Test tự động dùng Node và DOM/Chrome API mô phỏng: kiểm tra hình học kim/ô cho hơn 5.000 trường hợp, tiếng Việt, danh sách trùng/trống, adapter textarea/contenteditable, Shuffle/Sort, Hoàng → Huy → Đạt, xóa mục tiêu, hủy lượt quay, bật/tắt, reload cấu hình, popup lưu/cảnh báo và nhập thủ công.
 
-- 288 lượt với bốn tên: 24 hoán vị × 4 mục tiêu × 3 lượt; đối chiếu entry, góc renderer, phase và callback đúng một lần.
-- 72 lượt qua adapter engine tham khảo cũ; hơn 5.000 trường hợp hình học của core.
-- Đổi tên/danh sách hoặc tắt giữa lượt: hủy, giải phóng trạng thái bận và khôi phục phương thức gốc; quay ngẫu nhiên sau khi tắt.
-- Entry thật của engine được trả về, không gọi nhánh RNG trong lượt điều khiển.
-- Kết nối một engine bị giữ kín trong closure thông qua module và đúng Canvas; bỏ qua Canvas xem trước khác dù dùng cùng class.
-- Từ chối URL khác origin/phiên bản/query; gỡ hook khi tắt trước lúc nhận khung hình.
-- Popup tự chuyển từ chờ kết nối sang đã kết nối; debug không xuất hiện trên trang; quảng cáo/FAQ không bị thay đổi hoặc chặn liên kết.
+**Chưa kiểm thử thực tế việc Load unpacked, giao diện hiển thị, animation và adapter với DOM hiện tại trên Brave.** Môi trường có Brave nhưng công cụ không được cấp quyền điều khiển. Test mô phỏng không thay thế kiểm tra trình duyệt.
 
-`tests/engine-v440.cjs` trích nguyên logic physics và class engine từ tệp `dist-v4402.js` người dùng cung cấp, có SHA-256 nguồn trong đầu tệp. Các utility nhập ngoài và renderer trình duyệt được thay bằng shim để chạy Node. Test cầu nối mô phỏng module namespace và DOM/Chrome APIs; không thay thế kiểm thử import/CSP trong Brave thật.
+Checklist kiểm tra sau khi cài:
 
-**Chưa kiểm thử trực tiếp Load unpacked, module cache/CSP, DOM thực tế, animation hiển thị, âm thanh/confetti và dialog trên phiên Brave của người dùng.** Lần truy cập trình duyệt trước bị công cụ từ chối quyền đọc.
-
-## Checklist trên Brave
-
-1. Reload extension, tải lại tab, mở popup và xác nhận phiên bản chẩn đoán là 1.3.0. Bật và đợi kết nối; không quay khi nhãn còn **Chưa áp dụng**.
-2. Nhập Hoàng/Huy/Đạt/Vinh hoặc bốn tên khác. Chọn từng tên và bấm Canvas gốc 3–5 lượt, đối chiếu kim và dialog gốc.
-3. Shuffle ít nhất 5 lần, Sort rồi quay lại. Kết quả phải giữ đúng tên đã lưu.
-4. Thử Ctrl+Enter và các nút quay gốc khác. Tất cả phải dùng cùng engine đã kết nối.
-5. Xóa mục tiêu: cảnh báo và không có người thắng cố định giả. Thêm lại tên, thử tiếp.
-6. Đổi tên mục tiêu, Sort/Shuffle hoặc tắt giữa lượt: lượt cũ hủy; không trả kết quả cũ, trạng thái bận được bỏ.
-7. Tắt điều khiển rồi quay gốc: hành vi ngẫu nhiên hoạt động bình thường. Reload ở trạng thái bật và tắt để kiểm tra lưu cấu hình.
-8. Kiểm tra không có Canvas thứ hai hoặc bảng tọa độ; quảng cáo/FAQ bên dưới vẫn nguyên vẹn.
+1. Nhập `Hoàng`, `Huy`, `Đạt` trên website. Chọn `Hoàng`; kim và kết quả phải cùng chỉ Hoàng.
+2. Shuffle rồi quay, Sort rồi quay: vẫn Hoàng.
+3. Đổi mục tiêu thành Huy, sau đó Đạt: kim và kết quả theo tên mới.
+4. Xóa tên mục tiêu: xuất hiện cảnh báo và Spin Demo bị khóa.
+5. Đổi danh sách trong lúc quay: lượt quay hủy, không công bố kết quả cũ.
+6. Đóng/mở overlay, thử Escape; nhập thủ công nếu không đọc được Entries.
+7. Tắt demo: nút/overlay biến mất, vòng quay gốc vẫn dùng bình thường.
+8. Reload trang: mục tiêu và trạng thái bật/tắt còn được lưu.
 
 ## Tệp chính
 
-- `native-controller-v440.js`: profile `wheelState` và callback constructor của bản 440.
-- `native-module-link.js`: truy cập module đã khởi tạo và nhận diện đúng instance qua `draw()`.
-- `native-controller.js`: adapter tham khảo cũ và dispatch profile.
-- `native-discovery.js`: tìm component/engine/SpinningWheel host trong cây Vue.
-- `page-bridge.js`: bridge MAIN, kết nối, guard và khôi phục trạng thái bận.
-- `content.js`: storage, giao thức và nhãn chế độ nhỏ ngoài bố cục.
-- `popup.*`: chọn tên, bật/tắt, trạng thái tự cập nhật, chẩn đoán thu gọn.
-- `wheel-core.js`, `page-reader.js`: chuẩn hóa tên, hình học và nhận diện khu vực Canvas.
-- `tests/`: class engine trích từ nguồn cung cấp và các test độc lập dependency.
+- `manifest.json`: Manifest V3 và phạm vi quyền.
+- `popup.html`, `popup.css`, `popup.js`: giao diện và lưu cấu hình.
+- `wheel-core.js`: chuẩn hóa tên và hình học góc quay.
+- `page-reader.js`: adapter DOM chỉ đọc.
+- `content.js`: đồng bộ, overlay, Canvas và animation.
+- `tests/`: kiểm thử bằng Node, không phụ thuộc package ngoài.

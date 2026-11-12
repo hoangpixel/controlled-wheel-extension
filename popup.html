@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Fixed Winner Demo</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="wheel-core.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header><span class="eyebrow">WHEEL CONTROLLER · DEMO</span><h1>Fixed Winner Demo</h1><p>Mô phỏng vòng quay với kết quả định trước.</p></header>
+  <main>
+    <label class="mode"><span><strong>Chế độ demo</strong><small id="mode-label">Disabled</small></span><input id="enabled" type="checkbox" role="switch" aria-label="Bật Fixed Winner Demo" disabled></label>
+    <form id="winner-form">
+      <label for="winner">Tên muốn chọn</label>
+      <input id="winner" type="text" placeholder="Ví dụ: Hoàng" autocomplete="off" required aria-describedby="name-help" disabled>
+      <small id="name-help">Khớp tên có dấu và chữ hoa/thường; bỏ khoảng trắng hai đầu.</small>
+      <button id="save" type="submit" disabled>Save Winner</button>
+    </form>
+    <section class="target"><small>MỤC TIÊU ĐÃ LƯU</small><strong id="current">Chưa chọn</strong><span id="list-status">Đang kết nối trang…</span></section>
+    <p id="message" role="status" aria-live="polite"></p>
+    <button id="open-demo" class="secondary" type="button" disabled>Mở vòng quay demo ↗</button>
+  </main>
+  <footer>Chỉ vòng quay demo dùng kết quả đã chọn.</footer>
+</body>
+</html>
