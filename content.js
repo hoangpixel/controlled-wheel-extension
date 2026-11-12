@@ -10,24 +10,23 @@
   let current = { available: false, names: [], detail: "Đang đọc danh sách…" };
   let host, ui, observer, poll, debounce;
   let angle = 0, frame = 0, spinning = false, wheelImage;
-  let previousFocus;
+  let placement = "page";
+  let lastDebugFrame = -Infinity;
   let revision = 0;
   const palette = ["#8074de", "#35a8a0", "#e8b35a", "#d86b85", "#538ed0", "#a27ac6"];
   const styles = `
-    :host { all: initial; font-family: system-ui,sans-serif; color-scheme: dark; }
+    :host { all: initial; display:block; container-type:inline-size; font-family: system-ui,sans-serif; color-scheme: dark; color:#eef1ff; }
     * { box-sizing: border-box; }
     button,input,textarea,select { font: inherit; }
     button { cursor:pointer; border:0; border-radius:10px; padding:12px 16px; color:#17132e; background:#b0a3ff; font-weight:700; }
     button:hover { filter:brightness(1.1); } button:disabled { opacity:.45; cursor:not-allowed; }
     :focus-visible { outline:3px solid #bdb3ff; outline-offset:3px; }
-    .launcher { position:fixed; right:20px; bottom:20px; box-shadow:0 8px 30px #0008; border:1px solid #b4a8ff; background:#211b39; color:#e7e1ff; max-width:calc(100vw - 40px); font-size:13px; }
-    dialog { display:none; width:min(920px,calc(100vw - 28px)); max-height:calc(100dvh - 28px); margin:auto; padding:0; border:1px solid #394260; border-radius:22px; background:#0e1423; color:#eef1ff; box-shadow:0 30px 100px #0009; overflow:auto; }
-    dialog[open] { display:block; } dialog::backdrop { background:#050811c9; backdrop-filter:blur(5px); }
+    .demo { width:100%; margin:0; border:1px solid #62618b; border-radius:18px; background:#0e1423; color:#eef1ff; overflow:hidden; }
     header { padding:24px 26px 18px; border-bottom:1px solid #29324a; display:flex; justify-content:space-between; align-items:flex-start; gap:15px; }
-    .eyebrow { color:#baaeff; font-size:10px; letter-spacing:2px; font-weight:700; }
+    .eyebrow { display:block; color:#ffe0a3; font-size:12px; letter-spacing:.5px; font-weight:800; }
     h2 { margin:7px 0; font-size:25px; letter-spacing:-.7px; }
     p { font-size:12px; line-height:1.6; margin:0; color:#aeb9d2; }
-    .close { background:#202a40; color:#dde4ff; padding:8px 13px; font-size:20px; }
+    .disable { background:#202a40; color:#dde4ff; padding:10px 13px; font-size:12px; flex-shrink:0; }
     .layout { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(240px,1fr); gap:24px; padding:24px 26px; }
     .wheel-area { min-width:0; text-align:center; align-self:center; }
     .wheel { position:relative; margin:8px auto 16px; max-width:440px; }
@@ -50,22 +49,29 @@
     .status[data-error=true] { color:#ffc190; }
     .spin { width:100%; margin-top:auto; font-size:15px; }
     details { font-size:12px; color:#b4bfd6; } summary { cursor:pointer; margin-bottom:7px; }
+    .debug { border-top:1px solid #34405c; padding-top:12px; }
+    .debug dl { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; font:11px/1.6 ui-monospace,monospace; margin:0; }
+    .debug dt { color:#93a4c5; } .debug dd { margin:0; overflow-wrap:anywhere; color:#e2e8ff; }
     footer { padding:0 26px 22px; font-size:11px; color:#8996b3; line-height:1.5; }
     @media(max-width:660px) { .layout { grid-template-columns:1fr; padding:18px; gap:18px; } header { padding:18px; } h2 { font-size:22px; } .wheel { max-width:310px; } }
-    @media(prefers-reduced-motion:reduce) { dialog::backdrop { backdrop-filter:none; } }
+    @container(max-width:660px) { .layout { grid-template-columns:1fr; padding:18px; gap:18px; } header { padding:18px; } h2 { font-size:22px; } .wheel { max-width:310px; } }
   `;
   function ensureUI() {
-    if (host) return;
+    if (host) { mountUI(); return; }
     host = document.createElement("div");
     host.id = "fixed-winner-demo-host";
-    host.style.setProperty("position", "fixed", "important");
-    host.style.setProperty("z-index", "2147483647", "important");
+    host.style.setProperty("display", "block", "important");
+    host.style.setProperty("position", "relative", "important");
+    host.style.setProperty("width", "100%", "important");
+    host.style.setProperty("min-width", "0", "important");
+    host.style.setProperty("grid-column", "1 / -1", "important");
+    host.style.setProperty("flex-basis", "100%", "important");
+    host.style.setProperty("margin", "16px 0", "important");
     const shadow = host.attachShadow({ mode: "open" });
     // All markup is static; names enter the UI only through textContent/value.
     shadow.innerHTML = `<style>${styles}</style>
-      <button class="launcher" type="button">◉ Fixed Winner Demo</button>
-      <dialog aria-labelledby="fwd-heading" aria-describedby="fwd-description">
-        <header><div><span class="eyebrow">ENABLED · KẾT QUẢ ĐỊNH TRƯỚC</span><h2 id="fwd-heading">Fixed Winner Demo</h2><p id="fwd-description">Vòng quay mô phỏng riêng. Kết quả được chọn trước từ popup extension.</p></div><button class="close" type="button" aria-label="Đóng demo">×</button></header>
+      <section class="demo" aria-labelledby="fwd-heading" aria-describedby="fwd-description">
+        <header><div><span class="eyebrow">CONTROLLED DEMO – Kết quả định trước</span><h2 id="fwd-heading">Fixed Winner Demo</h2><p id="fwd-description">Canvas demo tích hợp trong trang. Chọn tên từ popup extension; dùng nút Spin bên dưới để quay demo.</p></div><button class="disable" type="button">Tắt demo</button></header>
         <div class="layout">
           <section class="wheel-area" aria-label="Vòng quay demo">
             <div class="wheel"><canvas width="900" height="900" aria-label="Vòng quay demo; kim chỉ ở phía trên" role="img"></canvas><div class="pointer" aria-hidden="true"></div></div>
@@ -77,20 +83,26 @@
             <div class="manual" hidden><label for="fwd-manual">Mỗi dòng một tên</label><textarea id="fwd-manual" spellcheck="false" placeholder="Hoàng&#10;Huy&#10;Đạt"></textarea><button class="apply secondary" type="button">Áp dụng danh sách demo</button></div>
             <details><summary class="count">Danh sách hiện tại</summary><textarea class="entries" readonly aria-label="Danh sách tên đang dùng"></textarea></details>
             <p class="status" role="status" aria-live="polite"></p>
-            <button class="spin" type="button">Spin Demo</button>
+            <button class="spin" type="button">Spin</button>
+            <details class="debug" open><summary>Debug · chỉ số bắt đầu từ 0</summary><dl>
+              <dt>Tên mục tiêu</dt><dd class="debug-target"></dd>
+              <dt>Chỉ số mục tiêu</dt><dd class="debug-index"></dd>
+              <dt>Góc hiện tại</dt><dd class="debug-angle"></dd>
+              <dt>Ô dưới kim</dt><dd class="debug-pointer"></dd>
+              <dt>Kết quả hoàn tất</dt><dd class="debug-result"></dd>
+              <dt>Vị trí tích hợp</dt><dd class="debug-placement"></dd>
+            </dl></details>
           </section>
         </div>
-        <footer>Các ô demo có kích thước bằng nhau. Trọng số, hình ảnh và tùy chỉnh của vòng quay gốc không được nhập vào demo.</footer>
-      </dialog>`;
-    document.documentElement.append(host);
+        <footer>CONTROLLED DEMO – Kết quả định trước. Các ô demo bằng nhau. Vòng quay và nút Spin gốc của website vẫn hoạt động độc lập ở khu vực gốc.</footer>
+      </section>`;
+    mountUI();
     const get = (selector) => shadow.querySelector(selector);
-    ui = { dialog: get("dialog"), launcher: get(".launcher"), canvas: get("canvas"), result: get(".result strong"), target: get(".target-name"), status: get(".status"), spin: get(".spin"), source: get("select"), manual: get(".manual"), input: get("#fwd-manual"), entries: get(".entries"), count: get(".count") };
+    ui = { section: get(".demo"), disable: get(".disable"), canvas: get("canvas"), result: get(".result strong"), target: get(".target-name"), status: get(".status"), spin: get(".spin"), source: get("select"), manual: get(".manual"), input: get("#fwd-manual"), entries: get(".entries"), count: get(".count"), debugTarget: get(".debug-target"), debugIndex: get(".debug-index"), debugAngle: get(".debug-angle"), debugPointer: get(".debug-pointer"), debugResult: get(".debug-result"), debugPlacement: get(".debug-placement") };
     ui.input.value = manualNames.join("\n");
     ui.source.value = source;
     ui.manual.hidden = source !== "manual";
-    ui.launcher.addEventListener("click", openDemo);
-    get(".close").addEventListener("click", closeDemo);
-    ui.dialog.addEventListener("cancel", (event) => { event.preventDefault(); closeDemo(); });
+    ui.disable.addEventListener("click", disableDemo);
     ui.source.addEventListener("change", () => {
       source = ui.source.value;
       ui.manual.hidden = source !== "manual";
@@ -105,6 +117,38 @@
     ui.spin.addEventListener("click", spin);
     renderState();
     paintBase();
+  }
+  function mountUI() {
+    if (!host) return;
+    const point = WheelDemoReader.mountPoint(document);
+    if (!point.parent) return;
+    placement = point.placement;
+    // SPA rerenders may detach the host. Reattach the same UI without touching native nodes.
+    if (host.parentElement !== point.parent || (point.before && point.before !== host && host.nextSibling !== point.before)) {
+      point.parent.insertBefore(host, point.before);
+    }
+  }
+  async function disableDemo() {
+    ui.disable.disabled = true;
+    try {
+      const stored = (await chrome.storage.local.get(KEY))[KEY] || {};
+      const next = { ...stored, enabled: false };
+      await chrome.storage.local.set({ [KEY]: next });
+      applyConfig(next);
+    } catch {
+      if (ui) ui.disable.disabled = false;
+      setStatus("Không lưu được trạng thái tắt. Hãy thử lại từ popup.", true);
+    }
+  }
+  function renderDebug() {
+    if (!ui) return;
+    const state = Core.inspect(current.names, config.target, angle);
+    ui.debugTarget.textContent = state.target || "Chưa chọn";
+    ui.debugIndex.textContent = String(state.targetIndex);
+    ui.debugAngle.textContent = `${state.angle.toFixed(6)} rad / ${state.degrees.toFixed(3)}°`;
+    ui.debugPointer.textContent = state.pointerIndex < 0 ? "Danh sách trống" : `[${state.pointerIndex}] ${state.pointerName}`;
+    ui.debugResult.textContent = ui.result.textContent;
+    ui.debugPlacement.textContent = placement === "wheel" ? "Cạnh khu vực vòng quay gốc" : "Đầu nội dung trang (không xác định được canvas gốc)";
   }
   function setStatus(text, error = false) {
     if (!ui) return;
@@ -130,14 +174,14 @@
     ui.entries.value = current.names.join("\n");
     ui.count.textContent = `Danh sách hiện tại · ${current.names.length} tên`;
     ui.spin.disabled = spinning || Boolean(error);
-    ui.spin.textContent = spinning ? "Đang quay…" : "Spin Demo";
-    ui.launcher.textContent = error ? "◉ Fixed Winner Demo · Cần kiểm tra" : "◉ Fixed Winner Demo";
-    ui.launcher.title = error || `Mục tiêu: ${config.target}`;
+    ui.spin.textContent = spinning ? "Đang quay…" : "Spin";
+    renderDebug();
     if (spinning) setStatus("Đang quay demo đến tên đã chọn trước…");
     else if (error) setStatus(error, true);
     else setStatus(`Sẵn sàng · ${current.names.length} tên · ${source === "manual" ? "Danh sách thủ công" : "Đồng bộ từ trang"}.`);
   }
   function sync() {
+    if (config.enabled) mountUI();
     const next = source === "manual" ? { available: true, names: [...manualNames], detail: "Danh sách demo nhập thủ công." } : WheelDemoReader.read(document);
     const changed = current.available !== next.available || JSON.stringify(current.names) !== JSON.stringify(next.names);
     current = next;
@@ -179,22 +223,12 @@
   function openDemo() {
     if (!config.enabled) return;
     ensureUI(); sync();
-    if (!ui.dialog.open) {
-      previousFocus = document.activeElement;
-      ui.dialog.showModal();
-    }
-  }
-  function closeDemo() {
-    const interrupted = spinning;
-    cancelSpin();
-    if (interrupted) resetResult("Đã hủy lượt quay");
-    ui?.dialog.close();
-    renderState();
-    if (previousFocus?.isConnected) previousFocus.focus();
+    host.scrollIntoView({ behavior: "auto", block: "start" });
+    ui.spin.focus({ preventScroll: true });
   }
   function cancelSpin() { cancelAnimationFrame(frame); frame = 0; spinning = false; }
   function destroyUI() {
-    closeDemo();
+    cancelSpin();
     host?.remove(); host = null; ui = null; wheelImage = null;
   }
   function paintBase() {
@@ -247,6 +281,7 @@
     const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 900 : 4800;
     let started;
     spinning = true;
+    lastDebugFrame = -Infinity;
     resetResult("Đang quay…");
     renderState();
     function tick(now) {
@@ -255,6 +290,7 @@
       const t = Math.min(1, (now - started) / duration);
       angle = start + (end - start) * (1 - Math.pow(1 - t, 4));
       draw();
+      if (now - lastDebugFrame >= 100 || t === 1) { renderDebug(); lastDebugFrame = now; }
       if (t < 1) { frame = requestAnimationFrame(tick); return; }
       // Verify again in case changes happened while the tab was suspended.
       sync();

@@ -7,28 +7,47 @@ class Element {
     this.tagName = tag; this.value = ''; this.textContent = ''; this.innerText = '';
     this.id = ''; this.className = ''; this.dataset = {}; this.attrs = {};
     this.handlers = {}; this.isConnected = true; this.open = false;
-    this.style = { setProperty() {} };
+    this.children = []; this.parentElement = null;
+    this.styleValues = {};
+    this.style = { setProperty: (key, value) => { this.styleValues[key] = value; } };
   }
   getAttribute(name) { return this.attrs[name] ?? null; }
   setAttribute(name, value) { this.attrs[name] = value; }
   getClientRects() { return this.hidden ? [] : [{}]; }
   closest(selector) {
     if (selector.includes('dialog')) return this.inDialog ? {} : null;
-    return this.tagName === 'TEXTAREA' ? null : this;
+    if (selector.includes('contenteditable')) return this.attrs.contenteditable === 'true' ? this : this.parentElement?.closest(selector) || null;
+    if (selector.includes('wheel-container')) return this.id === 'wheel-container' ? this : this.parentElement?.closest(selector) || null;
+    return null;
   }
   addEventListener(type, handler) { (this.handlers[type] ||= []).push(handler); }
   removeEventListener() {}
   async fire(type) { for (const handler of this.handlers[type] || []) await handler({ preventDefault() {} }); }
-  append(child) { child.parent = this; }
-  contains(child) { return child === this; }
-  remove() { this.isConnected = false; }
+  append(child) { this.insertBefore(child, null); }
+  insertBefore(child, before) {
+    if (child === before) return child;
+    if (child.parentElement) child.parentElement.children.splice(child.parentElement.children.indexOf(child), 1);
+    const index = before ? this.children.indexOf(before) : this.children.length;
+    if (index < 0) throw new Error('Reference node is not a child');
+    this.children.splice(index, 0, child); child.parentElement = this; child.isConnected = true;
+    child.onInsert?.(); return child;
+  }
+  get firstChild() { return this.children[0] || null; }
+  get nextSibling() { return this.parentElement?.children[this.parentElement.children.indexOf(this) + 1] || null; }
+  contains(child) { return child === this || this.children.some(el => el.contains(child)); }
+  remove() {
+    if (this.parentElement) this.parentElement.children.splice(this.parentElement.children.indexOf(this), 1);
+    this.parentElement = null; this.isConnected = false;
+  }
+  getBoundingClientRect() { return { width: this.tagName === 'CANVAS' ? 500 : 0, height: this.tagName === 'CANVAS' ? 500 : 0 }; }
+  scrollIntoView() { this.scrolled = true; }
   focus() {}
   showModal() { this.open = true; }
   close() { this.open = false; }
   getContext() { return new Proxy({}, { get: (_, prop) => prop === 'measureText' ? () => ({ width: 10 }) : () => {}, set: () => true }); }
   attachShadow() {
     const nodes = new Map();
-    this.shadowRoot = { set innerHTML(_value) {}, querySelector(selector) {
+    this.shadowRoot = { markup: '', set innerHTML(value) { this.markup = value; }, querySelector(selector) {
       if (!nodes.has(selector)) nodes.set(selector, new Element(selector === 'canvas' ? 'CANVAS' : 'DIV'));
       return nodes.get(selector);
     } };
@@ -41,11 +60,17 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
   const elements = new Map();
   const roots = [];
   const docHandlers = {};
+  const body = new Element('BODY'), main = new Element('MAIN'), documentElement = new Element('HTML');
+  const wheelContainer = new Element(), nativeCanvas = new Element('CANVAS'), nativeSpin = new Element('BUTTON');
+  wheelContainer.id = 'wheel-container';
+  documentElement.append(body); body.append(main); main.append(wheelContainer); main.append(editor);
+  wheelContainer.append(nativeCanvas); wheelContainer.append(nativeSpin);
   const doc = {
     hidden: false, activeElement: new Element(),
-    documentElement: { append(el) { roots.push(el); } }, body: {},
-    createElement(tag) { return new Element(tag.toUpperCase()); },
-    querySelectorAll() { return [editor]; },
+    documentElement, body,
+    createElement(tag) { const el = new Element(tag.toUpperCase()); el.onInsert = () => { if (el.id === 'fixed-winner-demo-host' && !roots.includes(el)) roots.push(el); }; return el; },
+    querySelectorAll(selector) { return selector === 'canvas' ? (nativeCanvas.isConnected ? [nativeCanvas] : []) : [editor]; },
+    querySelector() { return main.isConnected ? main : null; },
     getElementById(id) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
     addEventListener(name, fn) { docHandlers[name] = fn; },
     removeEventListener(name) { delete docHandlers[name]; }
@@ -89,7 +114,7 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
   function advance(time) {
     const callbacks = [...raf.values()]; raf.clear(); callbacks.forEach(fn => fn(time));
   }
-  return { load, request, flush, advance, chrome, storage, doc, editor, roots, elements, raf, intervals, docHandlers,
+  return { load, request, flush, advance, chrome, storage, doc, editor, roots, elements, raf, intervals, docHandlers, main, wheelContainer, nativeCanvas, nativeSpin,
     get ui() { return roots.at(-1)?.shadowRoot; } };
 }
 module.exports = { Element, environment };

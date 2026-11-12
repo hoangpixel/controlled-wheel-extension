@@ -62,14 +62,21 @@ async function finishSpin(env) {
   return env.ui.querySelector('.result strong').textContent;
 }
 
-test('actual content lifecycle: target survives Shuffle/Sort and changes to Huy/Đạt', async () => {
+test('inline content lifecycle: target survives Shuffle/Sort and changes to Huy/Đạt', async () => {
   const env = await boot();
   assert.equal((await env.request('FWD_OPEN')).ok, true);
-  assert.equal(env.ui.querySelector('dialog').open, true);
+  assert.equal(env.roots.at(-1).scrolled, true);
+  assert.equal(env.roots.at(-1).parentElement, env.main);
+  assert.equal(env.roots.at(-1).nextSibling, env.wheelContainer);
+  assert.doesNotMatch(env.ui.markup, /<dialog|class="launcher"/);
+  assert.match(env.ui.markup, /CONTROLLED DEMO – Kết quả định trước/);
   for (const names of ['Hoàng\nHuy\nĐạt', 'Đạt\nHoàng\nHuy', 'Huy\nĐạt\nHoàng']) {
     env.editor.value = names;
     assert.equal(await finishSpin(env), 'Hoàng');
     assert.match(env.ui.querySelector('canvas').getAttribute('aria-label'), /kim chỉ vào Hoàng/);
+    assert.equal(env.ui.querySelector('.debug-index').textContent, String(names.split('\n').indexOf('Hoàng')));
+    assert.match(env.ui.querySelector('.debug-pointer').textContent, /Hoàng$/);
+    assert.equal(env.ui.querySelector('.debug-result').textContent, 'Hoàng');
   }
   for (const target of ['Huy', 'Đạt']) {
     await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: true, target } });
@@ -109,7 +116,7 @@ test('disable removes UI/watchers and leaves site editor untouched; config survi
   assert.equal(await finishSpin(reloaded), 'Huy');
 });
 
-test('manual fallback persists list; close cancels spin and reopen remains usable', async () => {
+test('manual fallback persists list; inline disable cancels spin and re-enable remains usable', async () => {
   const env = await boot();
   env.editor.hidden = true;
   assert.equal((await env.request('FWD_STATUS')).available, false);
@@ -121,10 +128,74 @@ test('manual fallback persists list; close cancels spin and reopen remains usabl
   assert.equal(await finishSpin(env), 'Hoàng');
   await env.request('FWD_OPEN');
   await env.ui.querySelector('.spin').fire('click'); env.advance(0);
-  await env.ui.querySelector('.close').fire('click');
+  await env.ui.querySelector('.disable').fire('click');
   assert.equal(env.raf.size, 0);
-  assert.equal(env.ui.querySelector('dialog').open, false);
+  assert.equal(env.roots.at(-1).isConnected, false);
+  assert.equal(env.storage.fixedWinnerDemo.enabled, false);
+  await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: true, target: 'Hoàng' } });
   await env.request('FWD_OPEN'); assert.equal(await finishSpin(env), 'Hoàng');
+});
+
+test('repeated reordered spins: 6 permutations × 3 targets × 4 repetitions retain geometric/debug agreement', async () => {
+  const env = await boot();
+  const permutations = [
+    ['Hoàng', 'Huy', 'Đạt'], ['Hoàng', 'Đạt', 'Huy'], ['Huy', 'Hoàng', 'Đạt'],
+    ['Huy', 'Đạt', 'Hoàng'], ['Đạt', 'Hoàng', 'Huy'], ['Đạt', 'Huy', 'Hoàng']
+  ];
+  let spins = 0;
+  for (const names of permutations) {
+    env.editor.value = names.join('\n');
+    for (const target of names) {
+      await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: true, target } });
+      for (let repeat = 0; repeat < 4; repeat++) {
+        assert.equal(await finishSpin(env), target);
+        const index = names.indexOf(target);
+        assert.equal(env.ui.querySelector('.debug-index').textContent, String(index));
+        assert.equal(env.ui.querySelector('.debug-pointer').textContent, `[${index}] ${target}`);
+        const degrees = Number(env.ui.querySelector('.debug-angle').textContent.split(' / ')[1].replace('°', ''));
+        const center = degrees * Math.PI / 180 + (index + .5) * Math.PI * 2 / names.length;
+        assert.ok(Math.abs(Math.cos(center)) < .00002);
+        assert.ok(Math.sin(center) < -.99999);
+        spins++;
+      }
+    }
+  }
+  assert.equal(spins, 72);
+});
+
+test('inline insertion and disable preserve native node identity, order, handlers and style', async () => {
+  const env = await boot({ enabled: false, target: 'Hoàng' });
+  const originalOrder = [...env.main.children];
+  let nativeClicks = 0;
+  env.nativeSpin.addEventListener('click', () => { nativeClicks++; });
+  const handler = env.nativeSpin.handlers.click[0];
+  env.nativeCanvas.style.setProperty('border', '2px solid red');
+  await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: true, target: 'Hoàng' } });
+  assert.equal(env.main.children[0], env.roots.at(-1));
+  assert.equal(env.nativeCanvas.parentElement, env.wheelContainer);
+  assert.equal(env.nativeSpin.handlers.click[0], handler);
+  await env.nativeSpin.fire('click'); assert.equal(nativeClicks, 1);
+  await env.ui.querySelector('.disable').fire('click');
+  assert.deepEqual(env.main.children, originalOrder);
+  assert.equal(env.nativeCanvas.styleValues.border, '2px solid red');
+  await env.nativeSpin.fire('click'); assert.equal(nativeClicks, 2);
+  assert.equal(env.intervals.size, 0);
+});
+
+test('detached inline host is reattached, and absent native canvas uses a stable in-page fallback', async () => {
+  const env = await boot();
+  const host = env.roots.at(-1);
+  host.remove();
+  await env.request('FWD_STATUS');
+  assert.equal(host.parentElement, env.main);
+  assert.equal(host.nextSibling, env.wheelContainer);
+  assert.equal(env.roots.length, 1);
+  env.nativeCanvas.remove();
+  await env.request('FWD_STATUS');
+  assert.equal(env.main.firstChild, host);
+  assert.match(env.ui.querySelector('.debug-placement').textContent, /không xác định/);
+  await env.request('FWD_STATUS'); assert.equal(env.main.firstChild, host);
+  assert.equal(await finishSpin(env), 'Hoàng');
 });
 
 test('popup saves normalized target, warns for missing names and persists toggle', async () => {

@@ -26,6 +26,26 @@
     const text = editor.tagName === "TEXTAREA" ? editor.value : editor.innerText;
     return { available: true, names: root.WheelDemoCore.parseNames(text), detail: "Đang đọc ô danh sách hiển thị trên trang." };
   }
-  root.WheelDemoReader = Object.freeze({ discover, read });
+  function mountPoint(doc) {
+    // Read layout only. Never move, hide, replace, or bind handlers to native controls.
+    const wheels = [...doc.querySelectorAll("canvas")].filter((canvas) => {
+      if (!canvas.getClientRects().length || canvas.closest('[role="dialog"], dialog, [aria-hidden="true"]')) return false;
+      const { width, height } = canvas.getBoundingClientRect();
+      return width >= 120 && height >= 120 && width / height > .7 && width / height < 1.4;
+    }).sort((a, b) => {
+      const area = (el) => { const rect = el.getBoundingClientRect(); return rect.width * rect.height; };
+      return area(b) - area(a);
+    });
+    const canvas = wheels[0];
+    if (canvas) {
+      let anchor = canvas.closest('#wheelContainer, #wheel-container, .wheel-container, .spinning-wheel, [data-wheel-container]') || canvas.parentElement;
+      // Do not lift the demo outside the application's main surface.
+      if (!anchor || anchor === doc.body || anchor === doc.documentElement || anchor.contains(discover(doc))) anchor = canvas;
+      if (anchor.parentElement) return { parent: anchor.parentElement, before: anchor, placement: "wheel" };
+    }
+    const parent = doc.querySelector("main, [role=main], #app") || doc.body;
+    return { parent, before: parent?.firstChild || null, placement: "page" };
+  }
+  root.WheelDemoReader = Object.freeze({ discover, read, mountPoint });
   if (typeof module !== "undefined" && module.exports) module.exports = root.WheelDemoReader;
 })(globalThis);

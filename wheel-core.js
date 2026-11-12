@@ -18,7 +18,12 @@
     if (!Number.isInteger(count) || count < 1) return -1;
     return Math.min(count - 1, Math.floor(wrap(POINTER - angle) / TAU * count));
   }
-  const api = Object.freeze({ TAU, POINTER, normalizeName, parseNames, wrap, findTarget, landingAngle, indexAtPointer });
+  function inspect(names, target, angle) {
+    const targetIndex = findTarget(names, target);
+    const pointerIndex = indexAtPointer(names.length, angle);
+    return { target: normalizeName(target), targetIndex, pointerIndex, pointerName: names[pointerIndex] ?? "", angle: wrap(angle), degrees: wrap(angle) * 180 / Math.PI };
+  }
+  const api = Object.freeze({ TAU, POINTER, normalizeName, parseNames, wrap, findTarget, landingAngle, indexAtPointer, inspect });
   root.WheelDemoCore = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(globalThis);
