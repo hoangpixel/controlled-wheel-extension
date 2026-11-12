@@ -83,7 +83,7 @@
       if (message.type === "DIAGNOSTICS") {
         findBinding();
         const version = document.body?.innerText?.match(/(?:version|phiên bản)\s*[:#]?\s*(\d{2,6})/i)?.[1] || "unknown";
-        send({ type: "REPLY", id: message.id, state: { extensionVersion: "1.3.0", siteVersion: version, connected: Boolean(controller), ...discovery, moduleLink: moduleLink.status(), error: status().error } });
+        send({ type: "REPLY", id: message.id, state: { extensionVersion: "1.4.1", siteVersion: version, connected: Boolean(controller), ...discovery, moduleLink: moduleLink.status(), error: status().error } });
         return;
       }
       if (message.type === "CONFIG") {

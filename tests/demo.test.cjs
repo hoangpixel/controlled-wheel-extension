@@ -11,7 +11,7 @@ const { ReferenceWheel } = require('./native-fixture.cjs');
 test('Vietnamese names preserve accents, internal spaces and duplicates, with NFC normalization', () => {
   assert.deepEqual(Core.parseNames('  Hoàng  \r\nHuy\n\nĐạt\nNguyễn Văn An\nHuy'), ['Hoàng', 'Huy', 'Đạt', 'Nguyễn Văn An', 'Huy']);
   assert.equal(Core.findTarget(['Hoàng'], ' Hoàng '), 0);
-  assert.equal(Core.findTarget(['Hoàng'], 'hoàng'), -1);
+  assert.equal(Core.findTarget(['Hoàng'], 'hoàng'), 0);
 });
 
 test('shared geometry retains correct top-pointer results over 5,000 cases', () => {
@@ -38,7 +38,8 @@ test('DOM reader distinguishes visible editors and refuses ambiguity', () => {
 test('native adapter: 72 spins after reorder/target changes use actual engine entry and right-hand pointer', () => {
   let now = 0;
   const wheel = new ReferenceWheel();
-  const control = Native.attach(wheel, { now: () => now });
+  let samples = 0;
+  const control = Native.attach(wheel, { now: () => now, random: () => [0, .25, .5, .999999][samples++ % 4] });
   const permutations = [ ['Hoàng','Huy','Đạt'], ['Hoàng','Đạt','Huy'], ['Huy','Hoàng','Đạt'], ['Huy','Đạt','Hoàng'], ['Đạt','Hoàng','Huy'], ['Đạt','Huy','Hoàng'] ];
   let total = 0;
   for (const names of permutations) {
@@ -56,13 +57,14 @@ test('native adapter: 72 spins after reorder/target changes use actual engine en
         assert.equal(wheel.getEntryAtPointer(), result);
         assert.equal(control.status().result, target);
         const center = wheel.angle - names.indexOf(target) * Math.PI * 2 / names.length;
-        assert.ok(Math.abs(Math.cos(center) - 1) < 1e-10);
-        assert.ok(Math.abs(Math.sin(center)) < 1e-10);
+        const offset = Math.abs(Core.wrap(center + Math.PI) - Math.PI) / (Core.TAU / names.length);
+        assert.ok(offset >= .1 - 1e-10 && offset <= .4 + 1e-10);
         total++;
       }
     }
   }
   assert.equal(total, 72); assert.equal(wheel.randomStarts, 0);
+  assert.equal(samples, 72, 'status and validation must not sample RNG');
   control.dispose();
 });
 
@@ -142,16 +144,14 @@ test('two-world bridge: native control publishes site result, creates no second 
   const env = await boot();
   let status = await env.request('FWD_STATUS');
   assert.equal(status.supported, true); assert.equal(status.source, 'native');
-  assert.doesNotMatch(env.ui.markup, /<canvas|<dialog/);
-  assert.doesNotMatch(env.ui.markup, /class="debug"|class="entries"|<textarea|<pre|Chỉ số mục tiêu|Góc:/);
-  assert.match(env.ui.markup, /CONTROLLED DEMO/);
-  assert.equal(env.roots.at(-1).parentElement, env.doc.body);
+  assert.equal(env.roots.length, 0, 'content script must not inject a badge or other UI');
+  assert.deepEqual(env.doc.body.children, [env.main]);
   assert.deepEqual(env.main.children, [env.wheelContainer, env.editor]);
   await env.nativeSpin.fire('click'); env.advance(500); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult()?.text, 'Huy'); assert.equal(env.getBusy(), false);
-  assert.equal(env.ui.querySelector('.badge').textContent, 'CONTROLLED DEMO – Kết quả định trước');
+  assert.equal(env.roots.length, 0);
   await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Huy' } }); await env.flush();
-  assert.equal(env.roots.at(-1).isConnected, false); assert.equal(env.storage.fixedWinnerDemo.enabled, false);
+  assert.equal(env.roots.length, 0); assert.equal(env.storage.fixedWinnerDemo.enabled, false);
   await env.nativeSpin.fire('click'); env.wheel.tick(); env.wheel.tick(); env.wheel.tick();
   assert.equal(env.wheel.randomStarts, 1);
 });
@@ -161,7 +161,7 @@ test('unsupported engine is reported in popup protocol, without debug on page or
   const status = await env.request('FWD_STATUS');
   assert.equal(status.supported, false); assert.equal(status.available, false);
   assert.match(status.detail, /chưa được hỗ trợ/);
-  assert.equal(env.ui.querySelector('.badge').textContent, 'CONTROLLED DEMO – Chưa áp dụng');
+  assert.equal(env.roots.length, 0);
   let stopped = false;
   env.docHandlers.click({ type: 'click', target: env.nativeCanvas, preventDefault() {}, stopImmediatePropagation() { stopped = true; } });
   assert.equal(stopped, false);
@@ -182,7 +182,7 @@ test('production VNode roots find the wheel beyond 400 unrelated nodes instead o
   env.main._vnode = { component: { data: {}, subTree: { el: env.main, children: [...noisy, wheelNode] } } };
   assert.equal((await env.request('FWD_STATUS')).supported, true);
   const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
-  assert.equal(report.extensionVersion, '1.3.0');
+  assert.equal(report.extensionVersion, '1.4.1');
   assert.equal(report.scanTruncated, false);
   assert.ok(report.componentCount <= 3);
   assert.ok(report.vnodeCount < 10);
@@ -215,7 +215,7 @@ test('connection diagnostics return structure without participant values and app
   env.load('popup.js'); await env.flush();
   await env.elements.get('read-diagnostics').fire('click'); await env.flush();
   assert.match(env.elements.get('diagnostics-output').value, /visibleCanvasCount/);
-  assert.doesNotMatch(env.ui.markup, /visibleCanvasCount|Engine:|Góc:/);
+  assert.equal(env.roots.length, 0, 'diagnostics must stay in the popup');
 });
 
 test('missing target does not intercept site footer/FAQ link clicks', async () => {
@@ -233,9 +233,36 @@ test('popup persists normalized winner and shows native compatibility/missing-ta
   assert.equal(env.storage.fixedWinnerDemo.target, 'Hoàng');
   assert.match(env.elements.get('list-status').textContent, /Đã kết nối vòng quay gốc/);
   env.elements.get('winner').value = 'Absent'; await env.elements.get('winner-form').fire('submit'); await env.flush();
-  assert.match(env.elements.get('message').textContent, /không tồn tại/);
+  assert.match(env.elements.get('message').textContent, /Không tìm thấy/);
   env.elements.get('enabled').checked = false; await env.elements.get('enabled').fire('change'); await env.flush();
   assert.equal(env.storage.fixedWinnerDemo.enabled, false);
+});
+
+test('popup resolves a short name to the full entry and reports ambiguity after live list changes', async () => {
+  const env = await boot();
+  env.wheel.setEntries([{ text: 'Nguyễn Văn An' }, { text: 'Lê Minh Huy' }]);
+  env.load('popup.js'); await env.flush();
+  env.elements.get('winner').value = 'an';
+  await env.elements.get('winner-form').fire('submit'); await env.flush();
+  assert.equal(env.storage.fixedWinnerDemo.target, 'an');
+  assert.equal((await env.request('FWD_STATUS')).targetName, 'Nguyễn Văn An');
+  assert.equal(env.elements.get('matched-name').textContent, 'Khớp Entries: Nguyễn Văn An');
+  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  assert.equal(env.getResult().text, 'Nguyễn Văn An');
+  env.wheel.setEntries([{ text: 'Trần Đức An' }, { text: 'Nguyễn Văn An' }]);
+  const status = await env.request('FWD_STATUS');
+  assert.equal(status.targetFound, false); assert.equal(status.targetMatch, 'ambiguous');
+  await env.elements.get('winner-form').fire('submit'); await env.flush();
+  assert.match(env.elements.get('message').textContent, /khớp 2 mục nhập/);
+  assert.equal(env.elements.get('matched-name').textContent, '');
+  let stopped = false;
+  env.docHandlers.click({ type: 'click', target: env.nativeCanvas, preventDefault() {}, stopImmediatePropagation() { stopped = true; } });
+  assert.equal(stopped, true);
+  env.elements.get('winner').value = 'văn an';
+  await env.elements.get('winner-form').fire('submit'); await env.flush();
+  assert.equal(env.elements.get('matched-name').textContent, 'Khớp Entries: Nguyễn Văn An');
+  await env.nativeSpin.fire('click'); env.advance(10000); env.wheel.tick(); await env.flush();
+  assert.equal(env.getResult().text, 'Nguyễn Văn An');
 });
 
 test('manifest scopes both worlds to target host, uses only storage and includes packaged assets', () => {
@@ -243,6 +270,7 @@ test('manifest scopes both worlds to target host, uses only storage and includes
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
   assert.equal(manifest.manifest_version, 3); assert.deepEqual(manifest.permissions, ['storage']);
   assert.ok(manifest.content_scripts.some(script => script.world === 'MAIN'));
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'popup.html'), 'utf8'), /CONTROLLED DEMO/);
   for (const script of manifest.content_scripts) {
     assert.deepEqual(script.matches, ['https://wheelofnames.com/*']);
     for (const file of script.js) assert.ok(fs.statSync(path.join(root, file)).size > 0);

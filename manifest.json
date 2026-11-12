@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Fixed Winner Demo",
-  "version": "1.3.0",
-  "description": "Vòng quay demo có kết quả định trước, hiển thị rõ ràng trên Wheel of Names.",
+  "version": "1.4.1",
+  "description": "Vòng quay demo có kết quả định trước trên Wheel of Names.",
   "permissions": ["storage"],
   "action": {
     "default_title": "Fixed Winner Demo",

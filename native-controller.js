@@ -14,30 +14,35 @@
     if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.inspect(wheel, target);
     const entries = wheel.entryPicker.getDisplayEntries();
     const names = entries.map(text);
-    return { names, targetIndex: Core.findTarget(names, target), angle: Core.wrap(wheel.angle), pointerIndex: wheel.getIndexAtPointer(), pointerName: text(wheel.getEntryAtPointer()) };
+    const match = Core.resolveTarget(names, target);
+    return { names, targetIndex: match.index, targetName: match.name, targetMatch: match.kind, targetError: match.error,
+      angle: Core.wrap(wheel.angle), pointerIndex: wheel.getIndexAtPointer(), pointerName: text(wheel.getEntryAtPointer()) };
   }
-  function plan(wheel, target) {
-    if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.plan(wheel, target);
+  function plan(wheel, target, random) {
+    if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.plan(wheel, target, random);
     const state = inspect(wheel, target);
     const entries = wheel.entryPicker.getDisplayEntries();
     if (!entries.length) throw new Error("Danh sách vòng quay gốc đang trống.");
-    if (!target) throw new Error("Hãy nhập tên và bấm Save Winner trong popup.");
+    if (state.targetError) throw new Error(state.targetError);
     if (wheel.wheelConfig?.type === "image") throw new Error("Chưa hỗ trợ vòng quay dùng ảnh phủ thay cho các ô tên.");
-    if (state.targetIndex < 0) throw new Error(`Không tìm thấy “${target}” trên vòng quay gốc.`);
     if (entries.length !== wheel.entryPicker.getAllEntries().length) throw new Error("Chưa hỗ trợ vòng quay chỉ hiển thị một phần danh sách. Hãy tăng số ô tối đa để hiển thị tất cả tên.");
     if (entries.some(entry => typeof entry === "object" && entry.weight != null && entry.weight !== 1)) throw new Error("Chưa hỗ trợ trọng số khác 1 trên vòng quay gốc.");
     // Native wheel: pointer on the right; first slice is centered at angle 0.
     // Validate the native getter instead of reusing the separate demo's top pointer.
     const step = Core.TAU / entries.length;
-    const stop = state.targetIndex * step;
+    const center = state.targetIndex * step;
     const originalAngle = wheel.angle;
+    let stop;
     try {
-      for (const offset of [-.2, 0, .2]) {
-        wheel.angle = Core.wrap(stop + step * offset);
-        if (wheel.getIndexAtPointer() !== state.targetIndex || text(wheel.getEntryAtPointer()) !== Core.normalizeName(target)) {
+      const verify = angle => {
+        wheel.angle = angle;
+        if (wheel.getIndexAtPointer() !== state.targetIndex || text(wheel.getEntryAtPointer()) !== state.targetName) {
           throw new Error("Hệ tọa độ của vòng quay gốc không tương thích với adapter này.");
         }
-      }
+      };
+      for (const offset of [-.4, 0, .4]) verify(Core.wrap(center + step * offset));
+      stop = Core.nativeLandingAngle(entries.length, state.targetIndex, random?.());
+      verify(stop);
     } finally { wheel.angle = originalAngle; }
     return { ...state, end: wheel.angle + 6 * Core.TAU + Core.wrap(stop - Core.wrap(wheel.angle)) };
   }
@@ -49,6 +54,7 @@
     let result = "", error = "", lastSample = -Infinity;
     const originals = new Map();
     const clock = options.now || (() => performance.now());
+    const random = options.random || (() => Math.random());
     const fingerprint = () => JSON.stringify(wheel.entryPicker.getDisplayEntries());
     const sample = (force = false) => {
       const now = clock();
@@ -92,13 +98,13 @@
       if (disposed || !config.enabled) return original.apply(this, arguments);
       if (active) return;
       let next;
-      try { next = plan(wheel, config.target); }
+      try { next = plan(wheel, config.target, random); }
       catch (failure) { abort(failure.message); options.onCancel?.(); return; }
       if (wheel.isSpinning()) { error = "Vòng quay đang chạy."; sample(true); return; }
       const previousState = wheel.state;
       const started = clock();
       const duration = options.reducedMotion?.() ? 900 : Math.max(1000, Math.min(20000, (Number(wheel.wheelConfig?.spinTime) || 5) * 1000));
-      active = { previousState, started, duration, start: wheel.angle, end: next.end, fingerprint: fingerprint(), target: config.target };
+      active = { previousState, started, duration, start: wheel.angle, end: next.end, fingerprint: fingerprint(), targetIndex: next.targetIndex, targetName: next.targetName };
       result = ""; error = "";
       wheel.speed = 0;
       wheel.nameChangedCallback = nameChanged;
@@ -127,7 +133,7 @@
         abort("Đã hủy: engine gốc thay đổi trạng thái hoặc danh sách ngoài hợp đồng."); return value;
       }
       if (!active.finished) return value;
-      if (text(wheel.getEntryAtPointer()) !== active.target) {
+      if (wheel.getIndexAtPointer() !== active.targetIndex || text(wheel.getEntryAtPointer()) !== active.targetName) {
         abort("Đã hủy: ô thực tế dưới kim không khớp mục tiêu."); return value;
       }
       const idle = active.previousState;

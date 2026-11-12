@@ -13,25 +13,27 @@
   function inspect(wheel, target) {
     const angle = Core.wrap(wheel.wheelState.angle);
     const names = wheel.getDisplayEntries().map(name);
-    return { profile: "v440", names, angle, targetIndex: Core.findTarget(names, target),
+    const match = Core.resolveTarget(names, target);
+    return { profile: "v440", names, angle, targetIndex: match.index, targetName: match.name, targetMatch: match.kind, targetError: match.error,
       pointerIndex: wheel.getIndexAtPointer(angle), pointerName: name(wheel.getEntryAtAngle(angle)) };
   }
-  function plan(wheel, target) {
+  function plan(wheel, target, random) {
     const state = inspect(wheel, target);
     const entries = wheel.getDisplayEntries();
     if (!entries.length) throw new Error("Danh sách vòng quay gốc đang trống.");
-    if (!target) throw new Error("Hãy nhập tên và bấm Save Winner trong popup.");
-    if (state.targetIndex < 0) throw new Error(`Không tìm thấy “${target}” trên vòng quay gốc.`);
+    if (state.targetError) throw new Error(state.targetError);
     if (wheel.wheelConfig.type === "image") throw new Error("Chưa hỗ trợ vòng quay dùng ảnh phủ thay cho các ô tên.");
     if (entries.length !== wheel.wheelState.allEntries.length) throw new Error("Hãy tăng số ô tối đa để hiển thị toàn bộ danh sách trước khi bật điều khiển.");
     if (entries.some(entry => entry.weight != null && entry.weight !== 1)) throw new Error("Chưa hỗ trợ trọng số khác 1.");
-    const step = Core.TAU / entries.length, stop = state.targetIndex * step;
-    for (const offset of [-.2, 0, .2]) {
-      const angle = Core.wrap(stop + step * offset);
-      if (wheel.getIndexAtPointer(angle) !== state.targetIndex || name(wheel.getEntryAtAngle(angle)) !== Core.normalizeName(target)) {
+    const step = Core.TAU / entries.length, center = state.targetIndex * step;
+    const verify = angle => {
+      if (wheel.getIndexAtPointer(angle) !== state.targetIndex || name(wheel.getEntryAtAngle(angle)) !== state.targetName) {
         throw new Error("Hệ tọa độ engine không khớp profile bản 440.");
       }
-    }
+    };
+    for (const offset of [-.4, 0, .4]) verify(Core.wrap(center + step * offset));
+    const stop = Core.nativeLandingAngle(entries.length, state.targetIndex, random?.());
+    verify(stop);
     return { ...state, end: state.angle + 6 * Core.TAU + Core.wrap(stop - state.angle) };
   }
   function attach(wheel, options = {}) {
@@ -40,6 +42,7 @@
     let config = { enabled: true, target: "" }, active = null, result = "", error = "", disposed = false;
     let lastSample = -Infinity;
     const now = options.now || (() => performance.now());
+    const random = options.random || (() => Math.random());
     const microtask = options.microtask || (fn => queueMicrotask(fn));
     const originals = new Map();
     const fingerprint = () => JSON.stringify([wheel.wheelState.visibleEntries, wheel.wheelState.allEntries]);
@@ -84,14 +87,14 @@
       if (disposed || !config.enabled) return original.apply(this, arguments);
       if (active || wheel.isSpinning()) return;
       let next;
-      try { next = plan(wheel, config.target); }
+      try { next = plan(wheel, config.target, random); }
       catch (failure) {
         error = failure.message; sample(true);
         // SpinningWheel emits spin-started AFTER click() returns.
         microtask(() => options.onCancel?.()); return;
       }
       original.apply(this, arguments);
-      active = { start: next.angle, end: next.end, target: config.target, started: now(), fingerprint: fingerprint(),
+      active = { start: next.angle, end: next.end, targetIndex: next.targetIndex, targetName: next.targetName, started: now(), fingerprint: fingerprint(),
         duration: options.reducedMotion?.() ? 900 : Math.max(1000, Math.min(20000, (Number(wheel.wheelConfig.spinTime) || 5) * 1000)) };
       result = ""; error = ""; sample(true);
     });
@@ -105,7 +108,7 @@
       if (update.changed) wheel.nameChangedCallback();
       if (active !== spin) return;
       if (progress < 1) { sample(); return; }
-      if (name(wheel.getEntryAtAngle(angle)) !== active.target || wheel.getEntryAtPointer() !== update.entry) {
+      if (wheel.getIndexAtPointer(angle) !== active.targetIndex || name(wheel.getEntryAtAngle(angle)) !== active.targetName || wheel.getEntryAtPointer() !== update.entry) {
         abort("Đã hủy: kết quả thực tế dưới kim không khớp mục tiêu."); return;
       }
       active = null; result = name(update.entry); sample(true);

@@ -15,14 +15,13 @@
     <form id="winner-form">
       <label for="winner">Tên muốn chọn</label>
       <input id="winner" type="text" placeholder="Ví dụ: Hoàng" autocomplete="off" required aria-describedby="name-help" disabled>
-      <small id="name-help">Khớp tên có dấu và chữ hoa/thường; bỏ khoảng trắng hai đầu.</small>
+      <small id="name-help">Có thể nhập tên cuối, ví dụ “An” → “Nguyễn Văn An”. Giữ dấu, không phân biệt hoa/thường. Nếu khớp nhiều người, nhập thêm tên đệm hoặc đầy đủ họ tên.</small>
       <button id="save" type="submit" disabled>Save Winner</button>
     </form>
-    <section class="target"><small>MỤC TIÊU ĐÃ LƯU</small><strong id="current">Chưa chọn</strong><span id="list-status">Đang kết nối trang…</span></section>
+    <section class="target"><small>MỤC TIÊU ĐÃ LƯU</small><strong id="current">Chưa chọn</strong><small id="matched-name" aria-live="polite"></small><span id="list-status">Đang kết nối trang…</span></section>
     <p id="message" role="status" aria-live="polite"></p>
     <button id="open-demo" class="secondary" type="button" disabled>Đến vòng quay gốc ↓</button>
     <details id="diagnostics"><summary>Chẩn đoán kết nối</summary><button id="read-diagnostics" class="secondary" type="button">Đọc thông tin chẩn đoán</button><textarea id="diagnostics-output" readonly aria-label="Chẩn đoán kết nối" placeholder="Chỉ hiện khi bạn bấm đọc chẩn đoán."></textarea></details>
   </main>
-  <footer>CONTROLLED DEMO – Kết quả định trước</footer>
 </body>
 </html>

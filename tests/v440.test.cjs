@@ -16,7 +16,8 @@ test('uploaded v440 engine: 288 controlled spins retain native entry, phase, ren
     assert.equal(wheel.getEntryAtPointer(), entry);
     assert.equal(wheel.wheelState.phase, 'StoppedPhase');
   });
-  const control = Adapter.attach(wheel, { now: () => time });
+  let samples = 0;
+  const control = Adapter.attach(wheel, { now: () => time, random: () => [0, .5, .999999][samples++ % 3] });
   const context = { frames: [] };
   for (const names of permutations(['Hoàng', 'Huy', 'Đạt', 'Vinh'])) {
     wheel.configure(makeConfig(names));
@@ -38,13 +39,15 @@ test('uploaded v440 engine: 288 controlled spins retain native entry, phase, ren
         const drawn = context.frames.at(-1);
         assert.equal(drawn.angle, wheel.wheelState.angle);
         const center = drawn.angle - names.indexOf(target) * Core.TAU / names.length;
-        assert.ok(Math.abs(Math.cos(center) - 1) < 1e-10);
+        const offset = Math.abs(Core.wrap(center + Math.PI) - Math.PI) / (Core.TAU / names.length);
+        assert.ok(offset >= .1 - 1e-10 && offset <= .4 + 1e-10);
         wheel.tick(() => { randomCalls++; return .25; });
         assert.equal(called, before + 1);
       }
     }
   }
-  assert.equal(called, 288); assert.equal(randomCalls, 0); control.dispose();
+  assert.equal(called, 288); assert.equal(randomCalls, 0);
+  assert.equal(samples, 288, 'one landing sample per spin, none from status checks'); control.dispose();
 });
 
 test('v440 cancellation on target/list/disable restores methods and native random spin', () => {
@@ -150,10 +153,9 @@ test('full bridge connects a hidden v440 engine through its original module and 
   component.exposed.spin(); assert.equal(busy, true);
   env.advance(5000); wheel.tick(() => .4); await env.flush();
   assert.equal(result.text, 'Đạt'); assert.equal(busy, false);
-  assert.equal(env.ui.querySelector('.badge').textContent, 'CONTROLLED DEMO – Kết quả định trước');
-  assert.doesNotMatch(env.ui.markup, /<canvas|<pre/);
+  assert.equal(env.roots.length, 0, 'no badge, debug panel or replacement canvas is injected');
   component.exposed.spin(); assert.equal(busy, true);
   await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Đạt' } }); await env.flush();
-  assert.equal(busy, false); assert.equal(env.roots.at(-1).isConnected, false);
+  assert.equal(busy, false); assert.equal(env.roots.length, 0);
   assert.equal(Object.hasOwn(wheel, 'click'), false);
 });
