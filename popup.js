@@ -22,9 +22,14 @@
       const status = await send("FWD_STATUS");
       if (!status?.ok) throw new Error("Không thể kết nối demo.");
       $("open-demo").disabled = !config.enabled;
-      $("list-status").textContent = `${status.count} tên · ${status.source === "manual" ? "Nhập thủ công" : "Danh sách trên trang"}`;
+      if (!config.enabled) {
+        $("list-status").textContent = "Đã tắt · Vòng quay gốc hoạt động bình thường";
+        return null;
+      }
+      $("list-status").textContent = `${status.count} tên · ${status.supported ? "Đã kết nối vòng quay gốc" : "Chưa kết nối vòng quay gốc"}`;
       if (!status.available) return { text: status.detail, kind: "error" };
       if (config.target && !status.targetFound) return { text: `Tên “${config.target}” không tồn tại trong danh sách hiện tại.`, kind: "error" };
+      if (status.error) return { text: status.error, kind: "error" };
       return null;
     } catch {
       $("open-demo").disabled = true;

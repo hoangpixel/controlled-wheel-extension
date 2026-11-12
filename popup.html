@@ -9,9 +9,9 @@
   <script src="popup.js" defer></script>
 </head>
 <body>
-  <header><span class="eyebrow">WHEEL CONTROLLER · DEMO</span><h1>Fixed Winner Demo</h1><p>Mô phỏng vòng quay với kết quả định trước.</p></header>
+  <header><span class="eyebrow">WHEEL CONTROLLER · NATIVE</span><h1>Fixed Winner Demo</h1><p>Điều khiển vòng quay gốc với kết quả định trước khi kết nối tương thích.</p></header>
   <main>
-    <label class="mode"><span><strong>Chế độ demo</strong><small id="mode-label">Disabled</small></span><input id="enabled" type="checkbox" role="switch" aria-label="Bật Fixed Winner Demo" disabled></label>
+    <label class="mode"><span><strong>Điều khiển vòng quay gốc</strong><small id="mode-label">Disabled</small></span><input id="enabled" type="checkbox" role="switch" aria-label="Bật Fixed Winner Demo" disabled></label>
     <form id="winner-form">
       <label for="winner">Tên muốn chọn</label>
       <input id="winner" type="text" placeholder="Ví dụ: Hoàng" autocomplete="off" required aria-describedby="name-help" disabled>
@@ -20,7 +20,7 @@
     </form>
     <section class="target"><small>MỤC TIÊU ĐÃ LƯU</small><strong id="current">Chưa chọn</strong><span id="list-status">Đang kết nối trang…</span></section>
     <p id="message" role="status" aria-live="polite"></p>
-    <button id="open-demo" class="secondary" type="button" disabled>Đến vòng quay trên trang ↓</button>
+    <button id="open-demo" class="secondary" type="button" disabled>Đến vòng quay gốc / trạng thái ↓</button>
   </main>
   <footer>CONTROLLED DEMO – Kết quả định trước</footer>
 </body>
