@@ -1,16 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Fixed Winner Demo",
-  "version": "1.4.4",
-  "description": "Vòng quay demo có kết quả định trước trên Wheel of Names.",
+  "version": "1.5.0",
+  "description": "Lượt đầu chọn tên đã lưu; các lượt tiếp theo dùng ngẫu nhiên gốc của Wheel of Names.",
   "permissions": ["storage"],
+  "background": { "service_worker": "session-worker.js" },
   "action": {
     "default_title": "Fixed Winner Demo",
     "default_popup": "popup.html"
   },
   "content_scripts": [{
     "matches": ["https://wheelofnames.com/*"],
-    "js": ["wheel-core.js", "native-motion-v440.js", "native-controller-v440.js", "native-controller.js", "native-discovery.js", "native-module-link.js", "page-bridge.js"],
+    "js": ["wheel-core.js", "native-motion-v440.js", "native-controller-v440.js", "native-controller.js", "first-spin-controller.js", "native-discovery.js", "native-module-link.js", "page-bridge.js"],
     "world": "MAIN",
     "run_at": "document_start"
   }, {

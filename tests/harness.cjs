@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { webcrypto } = require('node:crypto');
+let documentSequence = 0;
 
 class Element {
   constructor(tag = 'DIV') {
@@ -79,7 +81,8 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
   };
   const storage = structuredClone(stored);
   const listeners = [];
-  let receiver;
+  let receiver, sessionReceiver;
+  const documentId = 'test-document-' + ++documentSequence;
   const raf = new Map(); let frameId = 0;
   const intervals = new Map(); let intervalId = 0;
   let now = 0;
@@ -106,9 +109,20 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
       },
       onChanged: { addListener(fn) { listeners.push(fn); } }
     },
-    runtime: { onMessage: { addListener(fn) { receiver = fn; } } },
-    tabs: { async query() { return [{ id: 1 }]; }, async sendMessage(_id, msg) { return request(msg.type); } }
+    runtime: { onMessage: { addListener(fn) { receiver = fn; } },
+      async sendMessage(message) {
+        return new Promise(resolve => sessionReceiver(message, message.type === 'FWD_SESSION_UPDATE' ? {} : {
+          tab: { id: 1, url: 'https://wheelofnames.com/' }, url: 'https://wheelofnames.com/', frameId: 0, documentId
+        }, resolve));
+      } },
+    tabs: { async query() { return [{ id: 1 }]; }, async sendMessage(_id, msg) { return request(msg); } }
   };
+  const workerChrome = { storage: chrome.storage, runtime: { onMessage: { addListener(fn) { sessionReceiver = fn; } } },
+    tabs: { async sendMessage(tabId, msg, options) {
+      if (tabId !== 1 || options.documentId !== documentId) throw new Error('Document no longer exists');
+      return request(msg);
+    } } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', 'session-worker.js'), 'utf8'), { chrome: workerChrome, crypto: webcrypto, URL });
   const shared = {
     console, document: doc, chrome, setTimeout, clearTimeout, queueMicrotask, URL,
     setInterval(fn) { intervals.set(++intervalId, fn); return intervalId; },
@@ -126,7 +140,7 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
     pageContext.__moduleLoaderForTests = loader;
     vm.runInContext('var originalModuleAPI = FixedWinnerModuleLink; globalThis.FixedWinnerModuleLink = { create(options) { return originalModuleAPI.create({ ...options, loadModule: __moduleLoaderForTests }); } };', pageContext);
   }
-  function request(type) { return new Promise(resolve => receiver({ type }, {}, resolve)); }
+  function request(message) { return new Promise(resolve => receiver(typeof message === 'string' ? { type: message } : message, {}, resolve)); }
   async function flush() { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); }
   function advance(time) {
     now = time;

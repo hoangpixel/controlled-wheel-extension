@@ -142,7 +142,7 @@ test('full bridge connects a hidden v440 engine through its original module and 
   env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/dist-v4402.js' });
   env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/ConfettiLauncher-v440.js' });
   env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/WheelConfigUtil-v440.js' });
-  ['wheel-core.js','native-motion-v440.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js'].forEach(file => env.load(file, 'page'));
+  ['wheel-core.js','native-motion-v440.js','native-controller-v440.js','native-controller.js','first-spin-controller.js','native-discovery.js','native-module-link.js'].forEach(file => env.load(file, 'page'));
   env.mockModuleLoader(async url => url.endsWith('WheelConfigUtil-v440.js') ? { l(during, after) {
     assert.equal(during, 'ticking-sound'); assert.equal(after, 'no-sound'); audioPreloads++;
   } } : { t: Wheel440 }); env.load('page-bridge.js', 'page');
@@ -156,17 +156,20 @@ test('full bridge connects a hidden v440 engine through its original module and 
   assert.match(env.elements.get('list-status').textContent, /Đã kết nối/);
   assert.equal((await env.request('FWD_STATUS')).supported, true);
   component.exposed.spin(); assert.equal(busy, true);
+  await env.flush();
   wheel.tick(() => .4);
   env.advance(6000); wheel.tick(() => .4); await env.flush();
   assert.equal(result.text, 'Đạt'); assert.equal(busy, false);
   assert.equal(env.roots.length, 0, 'no badge, debug panel or replacement canvas is injected');
   const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
-  assert.equal(report.extensionVersion, '1.4.4');
+  assert.equal(report.extensionVersion, '1.5.0');
   assert.equal(audioPreloads, 1); assert.equal(report.moduleLink.audioWarmup.phase, 'preload_requested');
   assert.equal(report.motion.spin, 1); assert.equal(report.motion.firstTickDelayMs, 0);
   assert.doesNotMatch(JSON.stringify(report.motion), /Hoàng|Huy|Đạt|Vinh/);
   component.exposed.spin(); assert.equal(busy, true);
   await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Đạt' } }); await env.flush();
-  assert.equal(busy, false); assert.equal(env.roots.length, 0);
+  assert.equal(busy, true, 'disabling must let an already-random native spin finish'); assert.equal(env.roots.length, 0);
   assert.equal(Object.hasOwn(wheel, 'click'), false);
+  for (let frame = 0; frame < 400; frame++) wheel.tick(() => .4);
+  assert.equal(busy, false);
 });
