@@ -132,7 +132,7 @@ async function boot(config = { enabled: true, target: 'Huy' }, supported = true)
   if (supported === true) env.wheelContainer.__vue__ = instance;
   if (supported === 'vue3') env.main.__vue_app__ = { _instance: { subTree: { children: [{ component: { data: { renamedEngine: { model: wheel } }, proxy: instance } }] } } };
   env.nativeSpin.addEventListener('click', () => instance.spin());
-  ['wheel-core.js','native-controller.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
+  ['wheel-core.js','native-controller.js','native-discovery.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
   ['wheel-core.js','page-reader.js','content.js'].forEach(file => env.load(file));
   await env.flush();
   return Object.assign(env, { wheel, instance, getResult: () => result, getBusy: () => busy });
@@ -173,6 +173,34 @@ test('Vue 3 root subtrees and renamed nested engine fields can connect', async (
   assert.equal(status.supported, true);
   await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult().text, 'Đạt');
+});
+
+test('production VNode roots find the wheel beyond 400 unrelated nodes instead of exhausting the component budget', async () => {
+  const env = await boot({ enabled: true, target: 'Huy' }, false);
+  const noisy = Array.from({ length: 400 }, () => ({ el: new Element('DIV'), data: {}, children: [{ data: {}, children: [] }] }));
+  const wheelNode = { el: env.wheelContainer, component: { data: {}, ctx: { controller: { engine: env.wheel } }, proxy: env.instance } };
+  env.main._vnode = { component: { data: {}, subTree: { el: env.main, children: [...noisy, wheelNode] } } };
+  assert.equal((await env.request('FWD_STATUS')).supported, true);
+  const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
+  assert.equal(report.extensionVersion, '1.2.2');
+  assert.equal(report.scanTruncated, false);
+  assert.ok(report.componentCount <= 3);
+  assert.ok(report.vnodeCount < 10);
+  assert.ok(report.rootSources.includes('_vnode'));
+  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  assert.equal(env.getResult().text, 'Huy');
+});
+
+test('hidden setup state reports component metadata rather than 256 empty state entries', async () => {
+  const env = await boot({ enabled: true, target: 'Huy' }, false);
+  env.main._vnode = { component: { type: { name: 'WheelApplication', setup() {} }, data: {}, setupState: {}, subTree: { el: env.main, children: [] } } };
+  const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
+  assert.equal(report.connected, false);
+  assert.equal(report.componentCount, 1);
+  assert.equal(report.scanTruncated, false);
+  assert.deepEqual(report.stateKeys, []);
+  assert.equal(report.componentSummaries[0].name, 'WheelApplication');
+  assert.equal(report.componentSummaries[0].hasSetupFunction, true);
 });
 
 test('connection diagnostics return structure without participant values and appear only on popup request', async () => {

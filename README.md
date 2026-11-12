@@ -1,8 +1,10 @@
 # Fixed Winner Demo — điều khiển vòng quay gốc
 
-Manifest V3 v1.2.1. Bản này bỏ Canvas riêng của extension và thêm adapter điều khiển **engine, Canvas, thao tác quay và callback kết quả của website** khi nhận diện được cấu trúc tương thích. Khi kết nối thành công có nhãn nhỏ **CONTROLLED DEMO – Kết quả định trước** ở góc dưới; khi chưa áp dụng, nhãn ghi rõ **Chưa áp dụng**. Dùng cho trình diễn có công bố kết quả định trước.
+Manifest V3 v1.2.2. Bản này bỏ Canvas riêng của extension và thêm adapter điều khiển **engine, Canvas, thao tác quay và callback kết quả của website** khi nhận diện được cấu trúc tương thích. Khi kết nối thành công có nhãn nhỏ **CONTROLLED DEMO – Kết quả định trước** ở góc dưới; khi chưa áp dụng, nhãn ghi rõ **Chưa áp dụng**. Dùng cho trình diễn có công bố kết quả định trước.
 
 Bản 1.2.1 đã bỏ toàn bộ bảng tọa độ/debug/danh sách phía trên vòng quay. Không chèn khối nội dung vào bố cục ứng dụng nữa. Quảng cáo, FAQ và các nội dung bên dưới của website được giữ nguyên; extension không ẩn, sao chép hoặc tạo lại các mục đó.
+
+Bản 1.2.2 sửa lỗi quét cây: trước đây VNode cũng bị tính vào giới hạn 256 component, có thể làm bộ dò dừng trước khu vực vòng quay. Bộ dò mới tách ngân sách 256 component/4.096 VNode, ưu tiên nhánh chứa Canvas, nhận diện gốc `_vnode`/`__vnode` và đọc state trong context. Đây là bản sửa bộ dò, không phải xác nhận chắc chắn hỗ trợ engine production 440.
 
 **Giới hạn quan trọng:** adapter dựa trên hợp đồng của `Wheel` trong repo `momander/wheel-spinner`. Chưa xác nhận engine/DOM của website đang chạy trên Brave giống hợp đồng này. Nếu trang không lộ đối tượng tương thích hoặc đã đổi cấu trúc, extension hiển thị **không kết nối được engine gốc**, không báo đã áp dụng thành công. Không có vòng quay mô phỏng khác để thay thế ngầm.
 
@@ -43,6 +45,8 @@ Nếu báo không tương thích: tải lại website sau khi reload extension. 
 
 Không còn hiển thị tọa độ, tên, chỉ số hoặc danh sách debug trên trang. Mục **Chẩn đoán kết nối** trong popup mặc định thu gọn, chỉ đọc thông tin khi bấm nút. Mục này giúp phân biệt không tìm thấy component, tìm thấy state nhưng không thấy wheel, hoặc engine thiếu phương thức theo hợp đồng. Các trường/phương thức được liệt kê để điều chỉnh adapter; không giả định bản production 440 giống mã tham khảo.
 
+Chẩn đoán 1.2.2 bổ sung `vnodeCount`, `rootSources`, `scanTruncated`, `componentSummaries` và `reason`. `no_engine_in_accessible_state` nghĩa là bộ dò không tìm thấy engine trong các state truy cập được; không có nghĩa engine không tồn tại. Nếu component giữ engine trong closure và không công khai state, adapter hiện tại không thể nối vào bằng phương pháp này. Không tự tăng quyền hoặc ghi đè hàm ngẫu nhiên để che lỗi kết nối.
+
 ## Quyền và dữ liệu
 
 Chỉ có quyền `storage`, phạm vi `https://wheelofnames.com/*`, không backend, không remote code, không gửi dữ liệu ra máy chủ ngoài. Vẫn lưu `fixedWinnerDemo: { enabled, target }` trong `chrome.storage.local`. Cấu hình dùng chung giữa các tab. Danh sách thủ công của bản cũ nếu có vẫn nằm trong local storage nhưng không được dùng trong chế độ gốc.
@@ -61,7 +65,7 @@ node --check page-bridge.js
 node --check popup.js
 ```
 
-15 test hiện tại bao gồm:
+17 test hiện tại bao gồm:
 
 - Chuẩn hóa tiếng Việt và hơn 5.000 trường hợp hình học của core dùng chung.
 - 72 lượt quay qua adapter gốc: 6 hoán vị × 3 tên mục tiêu × 4 lượt, xác nhận góc/kim bên phải, entry thực tế và callback gọi đúng một lần; nhánh quay ngẫu nhiên không được gọi trong lúc điều khiển.
@@ -71,6 +75,7 @@ node --check popup.js
 - Đổi danh sách/mục tiêu hoặc tắt giữa lượt: hủy; khôi phục đúng phương thức gốc và quay bình thường sau khi tắt.
 - Bridge giữa hai VM world tách biệt, callback kết quả website, không tạo Canvas thứ hai, trạng thái không tương thích và popup lưu/cảnh báo.
 - Nhãn ngoài bố cục, không có debug trên trang; không chặn vòng quay khi engine chưa hỗ trợ; tìm engine từ cây Vue 3/state đổi tên; chẩn đoán chỉ đọc theo yêu cầu và không chứa tên người tham gia.
+- Cây production có 400 nhánh VNode không liên quan trước vòng quay vẫn tìm được engine; component không công khai state được báo riêng, không bị thống kê thành 256 component rỗng.
 
 Fixture mô hình hóa hợp đồng mã tham khảo, **không phải engine tải trực tiếp từ website hiện tại**. Đã chạy test Node và kiểm tra cú pháp; chưa kiểm thử thực tế Load unpacked, engine/DOM hiện tại, animation hiển thị, âm thanh/confetti, thông báo thắng cuộc, bố cục và thao tác trên Brave. Lần kiểm tra trình duyệt trước bị công cụ từ chối quyền điều khiển.
 
@@ -88,6 +93,7 @@ Fixture mô hình hóa hợp đồng mã tham khảo, **không phải engine t�
 
 - `manifest.json`: hai content-script world, MV3, quyền storage.
 - `native-controller.js`: kiểm tra hợp đồng, điều khiển wheel gốc và khôi phục.
+- `native-discovery.js`: tìm engine theo nhánh Canvas, tách VNode/component và báo lý do không tìm thấy.
 - `page-bridge.js`: phát hiện component, bridge MAIN, guard và kết nối lại.
 - `content.js`: storage, giao thức, nhãn chế độ nhỏ ngoài bố cục trang.
 - `wheel-core.js`: chuẩn hóa tên/hình học dùng chung.

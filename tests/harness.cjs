@@ -87,7 +87,7 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
   const location = { origin: 'https://wheelofnames.com' };
   const browserWindow = {
     addEventListener(type, fn) { (windowHandlers[type] ||= []).push(fn); },
-    postMessage(data) { setImmediate(() => { for (const fn of windowHandlers.message || []) fn({ source: browserWindow, origin: location.origin, data }); }); },
+    postMessage(data) { const payload = structuredClone(data); setImmediate(() => { for (const fn of windowHandlers.message || []) fn({ source: browserWindow, origin: location.origin, data: payload }); }); },
     close() {}
   };
   const chrome = {
