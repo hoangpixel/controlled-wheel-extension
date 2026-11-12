@@ -1,0 +1,35 @@
+# Local helpers for reconstructing and publishing version history
+/.version-history-work/
+/version-history.bundle
+/version-history.json
+/Publish-VersionHistory.ps1
+
+# Dependencies, caches and test output
+node_modules/
+coverage/
+.nyc_output/
+.cache/
+*.log
+
+# Packaged extensions and private signing keys
+*.crx
+*.pem
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Local editor and assistant settings
+/.vscode/
+/.idea/
+/.codex/
+*.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
