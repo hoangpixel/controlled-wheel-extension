@@ -1,10 +1,28 @@
-# Fixed Winner Demo — bản 1.4.1
+# Fixed Winner Demo — bản 1.4.4
 
 Extension Manifest V3 điều khiển vòng quay gốc của wheelofnames.com với kết quả định trước. Cấu hình lưu bằng `chrome.storage.local`. Không có Canvas thứ hai, không thay chữ trong thông báo thắng cuộc.
 
 Profile **v440** được viết theo các tệp production người dùng cung cấp: `EditWheelPage-v440.js`, `StaticWheel-v440.js`, `ConfettiLauncher-v440.js`, `dist-v4402.js`. Đây là thay đổi cơ chế kết nối, không chỉ tăng phạm vi quét Vue như các bản 1.2.x.
 
 Trạng thái kết nối và lỗi hiển thị trong popup. Không chèn nhãn hoặc bảng tên/chỉ số/tọa độ/debug trên trang vòng quay. Quảng cáo, FAQ và nội dung bên dưới website giữ nguyên.
+
+## Mới trong 1.4.4 — nạp âm thanh trước và dùng physics v440
+
+- Chẩn đoán người dùng cung cấp cho lượt đầu: callback đổi tên mất 59,7 ms, khoảng cách tick lớn nhất 61,2 ms; lượt hai lần lượt là 0,4 ms và 21,6 ms. Độ trễ tick đầu chỉ khoảng 6 ms. Điểm gây khựng đo được nằm trong callback, nên thay mốc thời gian ở 1.4.3 chưa đủ.
+- Callback này gọi tiếng tick qua [module âm thanh gốc](https://wheelofnames.com/assets/WheelConfigUtil-v440.js). Trong bản đã kiểm tra, tài nguyên Howl/AudioContext có thể được tạo ở lần gọi đầu. Khi URL module này đã xuất hiện trong Resource Timing, extension truy cập đúng namespace module đã tải và gọi export `l` để yêu cầu preload, trước khi nhận engine. Hàm này không phát âm thanh và không phát sự kiện đổi tên giả. Đây là thay đổi nhắm vào việc khởi tạo lạnh; cần đo lại trên Brave để xác nhận hết khựng.
+- Quỹ đạo mới lấy gia tốc, hệ số giảm tốc, `slowSpin` và số tick từng pha từ physics v440 đã cung cấp. Bỏ số vòng cố định 6–7 và giới hạn 20 giây. Ví dụ cấu hình 10 giây: physics gốc đi khoảng 9,4 vòng, với thời lượng 10,05 giây tính cả tick chuyển pha.
+- Chọn tổng góc đi về phía trước gần quỹ đạo gốc nhất mà vẫn dừng đúng entry đã chọn. Khi quỹ đạo gốc đi ít nhất nửa vòng, chênh lệch tổng góc tối đa nửa vòng; với lượt rất ngắn/chậm có thể cần thêm một vòng để tới mục tiêu. Tỷ lệ tốc độ được lưu trong `motion.speedScale`, vì không thể vừa cố định người thắng vừa giữ mọi góc và vận tốc của lượt ngẫu nhiên nguyên vẹn.
+- Chế độ giảm chuyển động của trình duyệt vẫn dùng lượt rút gọn 0,9 giây. Adapter legacy vẫn giữ quỹ đạo riêng; thay đổi physics này dành cho v440.
+
+## Mới trong 1.4.3 — giữ tốc độ 1.4.1, sửa mốc thời gian khung đầu
+
+Bản vá này dựa trên 1.4.1, sau khi người dùng chủ động lùi bản 1.4.2 vì đoạn tăng tốc quá chậm.
+
+- Giữ nguyên công thức giảm tốc `1 - (1 - progress)^4`, số vòng và thời lượng của 1.4.1. Không thêm đoạn tăng tốc chậm.
+- Bắt đầu đồng hồ ở tick render đầu tiên, giữ nguyên góc hiện tại tại tick đó. Khoảng chờ từ click đến tick đầu không được cộng thành một cú nhảy góc. Thời lượng cấu hình tính từ tick đầu; độ trễ ban đầu vẫn cộng vào thời gian từ click đến kết quả.
+- Thêm số đo `motion` trong chẩn đoán popup của profile v440: số lượt, độ trễ tới tick đầu, khoảng cách lớn nhất giữa các tick và thời gian callback đổi tên gốc. Không chứa tên người, không chèn thông tin lên trang.
+
+Trong mô phỏng đã kết nối và đợi 5 giây, code cũ vẫn nhảy góc nếu tick đầu đến muộn. Thay đổi này sửa trường hợp đó mà giữ nguyên đường quay nhanh sau khi render bắt đầu. Chưa đo trên Brave để kết luận độ trễ thực tế đến từ khởi tạo âm thanh, renderer, tải trang hay tác vụ khác; chẩn đoán mới giúp phân biệt các trường hợp này.
 
 ## Mới trong 1.4.1
 
@@ -47,6 +65,7 @@ Class `b` chính là export `t` của `dist-v4402.js`. Bản 1.3.0 dùng đườ
 1. Tìm component đã mount có tên `SpinningWheel`, prop `wheelConfig` và phương thức `spin` được expose.
 2. Xác nhận trang đã tải cả `ConfettiLauncher-v440.js` và `dist-v4402.js` từ cùng thư mục, cùng origin. URL có query/hash hoặc khác phiên bản bị từ chối.
 3. Trong MAIN world, gọi `import()` với **đúng URL module gốc đã được website khởi tạo**, để truy cập namespace của chính module đó. Không tạo URL cache-busting, không fetch rồi eval source, không tải bản vá từ CDN. Các import lặp lại trong cùng môi trường dùng lại module đã được đánh giá; xem [tài liệu về module caching](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/import#module_namespace_object).
+   Nếu URL `WheelConfigUtil-v440.js` cùng thư mục đã được quan sát, gọi hàm preload của module này trước khi cài hook nhận engine. Nếu module vắng mặt/khác URL hoặc không có export phù hợp, bỏ qua preload và ghi rõ phase chẩn đoán; không nới lỏng chính sách URL.
 4. Tạm bọc `draw()` trên prototype của class engine. Renderer gốc vẫn được gọi nguyên vẹn. Chỉ nhận instance khi context Canvas và `wheelConfig` khớp component đã tìm thấy.
 5. Gỡ wrapper prototype ngay khi nhận diện xong, hoặc sau tối đa bốn giây, hoặc khi tắt. Không sửa prototype của API trình duyệt.
 6. Kết nối Pinia store chứa đúng wheel để có thể bỏ trạng thái bận khi hủy lượt.
@@ -65,8 +84,8 @@ MAIN world chịu CSP của website, theo [tài liệu Chrome](https://developer
 - Kim gốc nằm bên phải. Với `N` ô bằng nhau, tâm ô `i` tương ứng góc `i × 2π/N`.
 - Kiểm chứng tâm, hai điểm lệch 40% bề rộng ô và điểm dừng đã chọn bằng các getter thật `getIndexAtPointer(angle)` và `getEntryAtAngle(angle)` của engine.
 - Điểm dừng được lấy ngẫu nhiên trong hai dải `[-0,4; -0,1)` và `[0,1; 0,4)` lần bề rộng ô tính từ tâm; không dừng ở tâm hoặc sát biên. `Math.random()` chỉ được gọi để lấy điểm dừng, không ghi đè RNG toàn cục của website.
-- Wrapper `click()` bắt đầu lượt quay có giảm tốc, ít nhất sáu vòng. Wrapper `tick()` cập nhật cùng `wheelState` mà renderer gốc đọc: `angle`, `phase`, `indexAtPointer`, `entryAtPointer`, v.v.
-- Thời lượng theo cấu hình website, giới hạn 1–20 giây; chế độ giảm chuyển động dùng 0,9 giây.
+- Với v440 thông thường, tính quỹ đạo liên tục từ physics gốc và chọn số vòng gần nhất để tới điểm dừng đã chọn. Giữ thời lượng và pha tăng/giảm tốc của mô hình gốc, điều chỉnh tỷ lệ tốc độ để tới đúng entry, không đặt lại góc ngẫu nhiên giữa lượt. Wrapper `tick()` cập nhật cùng `wheelState` mà renderer gốc đọc: `angle`, `speed`, `phase`, `indexAtPointer`, `entryAtPointer`, v.v.
+- Thời lượng v440 dùng số tick của engine và scheduler 60 tick/giây của component gốc, không giới hạn 20 giây. Chế độ giảm chuyển động vẫn là 0,9 giây. Tính từ tick render đầu tiên; khoảng chờ trước tick đầu không làm thay đổi tiến độ/góc của khung đầu.
 - Khi kết thúc, trạng thái đã được cập nhật thành `StoppedPhase`, ô thực tế dưới kim được kiểm tra, rồi callback constructor `doneSpinningCallback(entry)` của website được gọi đúng một lần với đúng entry thật.
 - Sort/Shuffle hoặc thay đổi danh sách được xử lý qua `configure()` của engine. Đổi mục tiêu, cấu hình hoặc danh sách giữa lượt sẽ hủy lượt cũ.
 - Khi tắt, khôi phục descriptor/phương thức gốc. `Math.random`, `crypto.getRandomValues` và các API bảo mật không bị thay đổi. Sau khi tắt, engine tiếp tục quay ngẫu nhiên bằng luồng gốc.
@@ -85,7 +104,24 @@ MAIN world chịu CSP của website, theo [tài liệu Chrome](https://developer
 
 Mở popup → **Chẩn đoán kết nối** → **Đọc thông tin chẩn đoán**. Thông tin không hiện phía trên vòng quay.
 
-Bản này phải ghi `extensionVersion: "1.4.1"`. Khi đường module thành công, `connected` là `true` và `moduleLink.phase` là `captured`.
+Bản này phải ghi `extensionVersion: "1.4.4"`. Khi đường module thành công, `connected` là `true` và `moduleLink.phase` là `captured`.
+
+Nếu vẫn khựng, bấm đọc chẩn đoán **ngay sau lượt đầu**, rồi đọc lại sau lượt thứ hai để so sánh phần `motion`:
+
+| Trường | Số đo |
+| --- | --- |
+| `spin` | Số lượt đã bắt đầu từ lần kết nối adapter này |
+| `firstTickDelayMs` | Thời gian từ click đến tick điều khiển đầu tiên |
+| `maxTickGapMs` | Khoảng thời gian lớn nhất giữa hai tick điều khiển |
+| `maxNameCallbackMs` | Thời gian đồng bộ lớn nhất trong callback đổi tên của website |
+| `durationMs` | Thời lượng quỹ đạo đã lập, tính từ tick đầu |
+| `nativeTurns`, `plannedTurns` | Số vòng theo mô hình gốc và số vòng thực tế đã chọn |
+| `speedScale` | Tỷ lệ điều chỉnh tốc độ để tới điểm dừng |
+| `configuredSeconds`, `slowSpin` | Cấu hình engine được dùng cho lượt này |
+
+`motion` là `null` trước lượt đầu hoặc khi không kết nối profile v440. Các số đo phản ánh tick của engine, không phải phép đo đầy đủ thời gian paint/GPU. Giá trị lớn chỉ gợi ý bước cần kiểm tra, không tự chứng minh một nguyên nhân cụ thể.
+
+Kiểm tra thêm `moduleLink.audioWarmup`: `preload_requested` nghĩa là đã gọi hàm preload (chưa chứng minh mọi tệp âm thanh đã tải/giải mã xong); `durationMs` đo thời gian đồng bộ của lời gọi. `not_observed`, `unsupported` hoặc `error` cho biết preload chưa áp dụng. Đọc ngay sau lượt đầu rồi so sánh `maxNameCallbackMs` với lượt hai.
 
 Các phase thường gặp:
 
@@ -114,7 +150,8 @@ Hai execution world trao đổi cấu hình/kết quả qua `postMessage` cùng 
 Node.js 20+, không cần cài package:
 
 ```powershell
-node --test tests/demo.test.cjs tests/v440.test.cjs tests/targeting.test.cjs
+node --test tests/demo.test.cjs tests/v440.test.cjs tests/targeting.test.cjs tests/first-frame.test.cjs tests/native-motion.test.cjs tests/audio-warmup.test.cjs
+node --check native-motion-v440.js
 node --check native-controller-v440.js
 node --check native-module-link.js
 node --check native-controller.js
@@ -124,13 +161,18 @@ node --check popup.js
 node --check content.js
 ```
 
-29 test đã đạt, gồm:
+36 test đã đạt, gồm:
 
 - 288 lượt với bốn tên: 24 hoán vị × 4 mục tiêu × 3 lượt; đối chiếu entry, góc renderer, phase và callback đúng một lần.
 - 72 lượt qua adapter engine tham khảo cũ; hơn 5.000 trường hợp hình học của core.
 - 144 lượt mới với họ tên đầy đủ, tên nhập rút gọn, sáu thứ tự danh sách, bốn mẫu điểm dừng mỗi mục tiêu trên cả hai adapter. Đối chiếu chính entry dưới kim, đủ bốn vị trí khác nhau trong ô và không có mẫu RNG từ việc đọc trạng thái.
 - 8.015 trường hợp góc bổ sung: hai phía của tâm, khoảng cách an toàn với biên và đúng chỉ số ở các ô đầu/cuối. Kiểm tra tên trùng, tên đệm, Unicode, hoa/thường, dấu và tránh khớp nhầm một phần từ.
 - Popup hiển thị họ tên đã khớp; khi danh sách thay đổi thành nhiều người cùng tên, báo lỗi và chặn quay cho đến khi nhập rõ hơn.
+- 216 lượt mô phỏng cho lượt đầu và lượt thứ hai trên cả hai adapter: đã kết nối và đợi 0/5 giây, khung đầu trễ 0/120/500 ms, 30/60/144 FPS và các cấu hình thời lượng. Đối chiếu từng mốc góc với quỹ đạo được chọn; khung đầu giữ nguyên góc, callback đúng entry một lần.
+- Quỹ đạo physics đối chiếu từng tick với engine fixture ở 0,9/1/5/10/30 giây, bật/tắt slow-spin, trạng thái đầu lạnh hoặc đã dừng. Đối chiếu pha, số tick trong pha, vận tốc và quãng góc trước khi áp dụng tỷ lệ tới mục tiêu.
+- Kiểm tra tích hợp lượt 30 giây không dừng sớm ở giây 20; các lượt quay chậm và người thắng vẫn đúng entry thật.
+- Preload âm thanh diễn ra trước capture, không phát callback giả; từ chối URL âm thanh khác origin/query hoặc chưa quan sát và hủy khi tắt trước lúc import xong. Test mô phỏng chi phí khởi tạo 60 ms chuyển ra trước lượt quay; không thay thế đo AudioContext thật trên Brave.
+- Chẩn đoán phân biệt độ trễ tick đầu, khoảng cách tick và thời gian callback; kiểm tra số liệu được trả về qua popup mà không chứa tên người.
 - Đổi tên/danh sách hoặc tắt giữa lượt: hủy, giải phóng trạng thái bận và khôi phục phương thức gốc; quay ngẫu nhiên sau khi tắt.
 - Entry thật của engine được trả về, không gọi nhánh RNG trong lượt điều khiển.
 - Kết nối một engine bị giữ kín trong closure thông qua module và đúng Canvas; bỏ qua Canvas xem trước khác dù dùng cùng class.
@@ -139,11 +181,11 @@ node --check content.js
 
 `tests/engine-v440.cjs` trích nguyên logic physics và class engine từ tệp `dist-v4402.js` người dùng cung cấp, có SHA-256 nguồn trong đầu tệp. Các utility nhập ngoài và renderer trình duyệt được thay bằng shim để chạy Node. Test cầu nối mô phỏng module namespace và DOM/Chrome APIs; không thay thế kiểm thử import/CSP trong Brave thật.
 
-**Bản 1.3.0 đã được người dùng xác nhận chạy trên Brave. Bản nâng cấp 1.4.1 chưa được kiểm thử trực tiếp trên Brave**: cần kiểm tra Load unpacked, import/CSP, DOM thực tế, vị trí kim và animation hiển thị, âm thanh/confetti, dialog. Test tự động dùng DOM/Chrome API mô phỏng và engine fixture, không thay thế kiểm thử trình duyệt.
+**Bản nâng cấp 1.4.4 chưa được kiểm thử trực tiếp trên Brave**: cần kiểm tra Load unpacked, import/CSP, DOM thực tế, vị trí kim và animation hiển thị, preload/AudioContext thật, âm thanh/confetti, dialog. Test tự động dùng DOM/Chrome API mô phỏng và engine fixture, không thay thế kiểm thử trình duyệt.
 
 ## Checklist trên Brave
 
-1. Reload extension tại `brave://extensions`, tải lại tab website, mở popup và xác nhận phiên bản chẩn đoán là 1.4.1. Bật và đợi popup báo **Đã kết nối vòng quay gốc** trước khi quay.
+1. Reload extension tại `brave://extensions`, tải lại tab website, mở popup và xác nhận phiên bản chẩn đoán là 1.4.4. Bật và đợi popup báo **Đã kết nối vòng quay gốc** trước khi quay. Quay lượt đầu rồi lượt thứ hai; đọc `moduleLink.audioWarmup` và `motion.maxNameCallbackMs` sau từng lượt. Kiểm tra callback lượt đầu còn mất khoảng 60 ms hay đã giảm. So sánh bật/tắt extension cùng cấu hình 5/10/30 giây và slow-spin; thời lượng và các pha phải gần với engine gốc, với sai khác tốc độ do điểm dừng mục tiêu.
 2. Trong Entries nhập `Nguyễn Văn An`, `Lê Minh Huy`, `Phạm Minh Hoàng`, `Trần Quốc Đạt` trên bốn dòng. Popup nhập `An`, lưu và kiểm tra **Khớp Entries: Nguyễn Văn An**. Quay 10 lượt: kim phải dừng tại các điểm khác nhau trong ô An, cách tâm và biên; dialog luôn hiển thị đầy đủ `Nguyễn Văn An`. Các vị trí ngẫu nhiên có thể ở gần nhau giữa hai lượt.
 3. Thử `an`, `VĂN AN` và toàn bộ `Nguyễn Văn An`; cả ba phải chọn đúng entry. `Anh` hoặc `Hoang` không được khớp `An` hoặc `Hoàng`. Chọn tên ngắn của từng người còn lại để thử tiếp.
 4. Shuffle ít nhất 5 lần, Sort rồi quay lại. Kết quả phải giữ đúng họ tên đã khớp, dù chỉ số của ô thay đổi.
@@ -157,6 +199,7 @@ node --check content.js
 ## Tệp chính
 
 - `native-controller-v440.js`: profile `wheelState` và callback constructor của bản 440.
+- `native-motion-v440.js`: quỹ đạo liên tục từ gia tốc, giảm tốc và số tick các pha v440.
 - `native-module-link.js`: truy cập module đã khởi tạo và nhận diện đúng instance qua `draw()`.
 - `native-controller.js`: adapter tham khảo cũ và dispatch profile.
 - `native-discovery.js`: tìm component/engine/SpinningWheel host trong cây Vue.

@@ -67,7 +67,7 @@ for (const profile of ['legacy', 'v440']) {
         const landings = new Set();
         for (let repeat = 0; repeat < 4; repeat++) {
           const before = called;
-          spin(); now += 5000; tick(); tick();
+          spin(); tick(); now += 6000; tick(); tick();
           assert.equal(called, before + 1);
           assert.equal(result.text, full);
           const entries = profile === 'v440' ? wheel.getDisplayEntries() : wheel.entries;

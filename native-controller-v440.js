@@ -2,6 +2,7 @@
 (function (root) {
   "use strict";
   const Core = root.WheelDemoCore || (typeof require === "function" ? require("./wheel-core.js") : null);
+  const Motion = root.FixedWinnerMotion440 || (typeof require === "function" ? require("./native-motion-v440.js") : null);
   const name = entry => Core.normalizeName(entry?.text);
   function compatible(wheel) {
     const state = wheel?.wheelState;
@@ -34,13 +35,15 @@
     for (const offset of [-.4, 0, .4]) verify(Core.wrap(center + step * offset));
     const stop = Core.nativeLandingAngle(entries.length, state.targetIndex, random?.());
     verify(stop);
-    return { ...state, end: state.angle + 6 * Core.TAU + Core.wrap(stop - state.angle) };
+    const motion = Motion.create(wheel.wheelState, stop);
+    return { ...state, stop, motion, end: state.angle + motion.distance };
   }
   function attach(wheel, options = {}) {
     if (!compatible(wheel)) throw new Error("Engine không khớp cấu trúc wheelState của bản 440.");
     if (wheel.isSpinning()) throw new Error("Vòng quay đang chạy. Đợi lượt hiện tại kết thúc.");
     let config = { enabled: true, target: "" }, active = null, result = "", error = "", disposed = false;
     let lastSample = -Infinity;
+    let timing = null, spinCount = 0;
     const now = options.now || (() => performance.now());
     const random = options.random || (() => Math.random());
     const microtask = options.microtask || (fn => queueMicrotask(fn));
@@ -54,11 +57,11 @@
     function sample(force = false) {
       if (force || now() - lastSample >= 100) { lastSample = now(); options.onStatus?.(status()); }
     }
-    function setAngle(angle, phase) {
+    function setAngle(angle, phase, speed = 0, ticksInPhase = null) {
       const previous = wheel.wheelState;
       const pointerIndex = wheel.getIndexAtPointer(angle);
       const entry = wheel.getEntryAtAngle(angle);
-      wheel.wheelState = { ...previous, angle, speed: 0, phase, ticksInPhase: previous.ticksInPhase + 1,
+      wheel.wheelState = { ...previous, angle, speed, phase, ticksInPhase: ticksInPhase ?? previous.ticksInPhase + 1,
         prevIndexAtPointer: previous.indexAtPointer, indexAtPointer: pointerIndex, entryAtPointer: entry, visibleEntriesChanged: false };
       return { entry, changed: pointerIndex !== previous.indexAtPointer };
     }
@@ -86,6 +89,7 @@
     patch("click", original => function () {
       if (disposed || !config.enabled) return original.apply(this, arguments);
       if (active || wheel.isSpinning()) return;
+      const clickedAt = now();
       let next;
       try { next = plan(wheel, config.target, random); }
       catch (failure) {
@@ -94,20 +98,41 @@
         microtask(() => options.onCancel?.()); return;
       }
       original.apply(this, arguments);
-      active = { start: next.angle, end: next.end, targetIndex: next.targetIndex, targetName: next.targetName, started: now(), fingerprint: fingerprint(),
-        duration: options.reducedMotion?.() ? 900 : Math.max(1000, Math.min(20000, (Number(wheel.wheelConfig.spinTime) || 5) * 1000)) };
+      const reduced = options.reducedMotion?.() === true;
+      const duration = reduced ? 900 : next.motion.durationMs;
+      timing = { spin: ++spinCount, firstTickDelayMs: null, maxTickGapMs: 0, maxNameCallbackMs: 0,
+        durationMs: duration, nativeTurns: next.motion.nativeDistance / Core.TAU,
+        plannedTurns: reduced ? null : next.motion.distance / Core.TAU, speedScale: reduced ? null : next.motion.scale,
+        configuredSeconds: wheel.wheelState.spinTime, slowSpin: wheel.wheelState.slowSpin === true };
+      active = { start: next.angle, end: reduced ? next.angle + 6 * Core.TAU + Core.wrap(next.stop - next.angle) : next.end,
+        motion: reduced ? null : next.motion, targetIndex: next.targetIndex, targetName: next.targetName,
+        clickedAt, started: null, lastTickAt: null, timing, fingerprint: fingerprint(),
+        duration };
       result = ""; error = ""; sample(true);
     });
     patch("tick", original => function () {
       if (!active) return original.apply(this, arguments);
       if (fingerprint() !== active.fingerprint) { abort("Đã hủy: danh sách engine thay đổi."); return; }
       const spin = active;
-      const progress = Math.max(0, Math.min(1, (now() - active.started) / active.duration));
-      const angle = Core.wrap(active.start + (active.end - active.start) * (1 - Math.pow(1 - progress, 4)));
-      const update = setAngle(angle, progress >= 1 ? "StoppedPhase" : progress < .2 ? "AcceleratingPhase" : "DeceleratingPhase");
-      if (update.changed) wheel.nameChangedCallback();
+      const time = now();
+      // Exclude work before the first renderer tick from the motion clock.
+      if (spin.started === null) {
+        spin.started = time;
+        spin.timing.firstTickDelayMs = Math.max(0, time - spin.clickedAt);
+      } else spin.timing.maxTickGapMs = Math.max(spin.timing.maxTickGapMs, time - spin.lastTickAt);
+      spin.lastTickAt = time;
+      const progress = Math.max(0, Math.min(1, (time - spin.started) / spin.duration));
+      const trajectory = spin.motion?.sample(time - spin.started);
+      const angle = Core.wrap(spin.start + (trajectory ? trajectory.distance : (spin.end - spin.start) * (1 - Math.pow(1 - progress, 4))));
+      const phase = trajectory?.phase || (progress >= 1 ? "StoppedPhase" : progress < .2 ? "AcceleratingPhase" : "DeceleratingPhase");
+      const update = setAngle(angle, phase, trajectory?.speed || 0, trajectory?.ticksInPhase);
+      if (update.changed) {
+        const callbackStarted = now();
+        wheel.nameChangedCallback();
+        spin.timing.maxNameCallbackMs = Math.max(spin.timing.maxNameCallbackMs, now() - callbackStarted);
+      }
       if (active !== spin) return;
-      if (progress < 1) { sample(); return; }
+      if (phase !== "StoppedPhase") { sample(); return; }
       if (wheel.getIndexAtPointer(angle) !== active.targetIndex || name(wheel.getEntryAtAngle(angle)) !== active.targetName || wheel.getEntryAtPointer() !== update.entry) {
         abort("Đã hủy: kết quả thực tế dưới kim không khớp mục tiêu."); return;
       }
@@ -124,6 +149,7 @@
     }
     return {
       status, validate: () => plan(wheel, config.target),
+      timing: () => timing ? { ...timing } : null,
       configure(next) {
         const target = Core.normalizeName(next.target);
         if (target !== config.target || next.enabled !== config.enabled) abort("");

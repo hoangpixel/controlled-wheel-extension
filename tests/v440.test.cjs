@@ -26,10 +26,11 @@ test('uploaded v440 engine: 288 controlled spins retain native entry, phase, ren
       for (let repeat = 0; repeat < 3; repeat++) {
         const before = called;
         wheel.click();
+        wheel.tick(() => { randomCalls++; return .25; });
         time += 1000; wheel.tick(() => { randomCalls++; return .25; });
         assert.equal(called, before);
         assert.equal(wheel.isSpinning(), true);
-        time += 4000; wheel.tick(() => { randomCalls++; return .25; });
+        time += 5000; wheel.tick(() => { randomCalls++; return .25; });
         wheel.draw(context);
         assert.equal(called, before + 1);
         assert.equal(winner.text, target);
@@ -129,7 +130,8 @@ test('disabling while waiting for native draw removes the temporary prototype ho
 
 test('full bridge connects a hidden v440 engine through its original module and handles native click/disable', async () => {
   const env = environment({ fixedWinnerDemo: { enabled: true, target: 'Đạt' } });
-  const config = makeConfig(['Hoàng', 'Huy', 'Đạt', 'Vinh']); let result, busy = false;
+  const config = makeConfig(['Hoàng', 'Huy', 'Đạt', 'Vinh']); let result, busy = false, audioPreloads = 0;
+  config.duringSpinSound = 'ticking-sound'; config.afterSpinSound = 'no-sound';
   const store = { wheelConfigs: [config], setWheelBusy(index, value) { busy = value; } };
   const wheel = new Wheel440(() => {}, entry => { result = entry; store.setWheelBusy(0, false); });
   wheel.configure(config);
@@ -139,8 +141,11 @@ test('full bridge connects a hidden v440 engine through its original module and 
   env.main._vnode = { component: { subTree: { el: env.main, children: [{ el: env.wheelContainer, component }] } } };
   env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/dist-v4402.js' });
   env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/ConfettiLauncher-v440.js' });
-  ['wheel-core.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js'].forEach(file => env.load(file, 'page'));
-  env.mockModuleLoader(async () => ({ t: Wheel440 })); env.load('page-bridge.js', 'page');
+  env.resourceEntries.push({ name: 'https://wheelofnames.com/assets/WheelConfigUtil-v440.js' });
+  ['wheel-core.js','native-motion-v440.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js'].forEach(file => env.load(file, 'page'));
+  env.mockModuleLoader(async url => url.endsWith('WheelConfigUtil-v440.js') ? { l(during, after) {
+    assert.equal(during, 'ticking-sound'); assert.equal(after, 'no-sound'); audioPreloads++;
+  } } : { t: Wheel440 }); env.load('page-bridge.js', 'page');
   ['wheel-core.js','page-reader.js','content.js'].forEach(file => env.load(file));
   await env.flush();
   env.load('popup.js'); await env.flush();
@@ -151,9 +156,15 @@ test('full bridge connects a hidden v440 engine through its original module and 
   assert.match(env.elements.get('list-status').textContent, /Đã kết nối/);
   assert.equal((await env.request('FWD_STATUS')).supported, true);
   component.exposed.spin(); assert.equal(busy, true);
-  env.advance(5000); wheel.tick(() => .4); await env.flush();
+  wheel.tick(() => .4);
+  env.advance(6000); wheel.tick(() => .4); await env.flush();
   assert.equal(result.text, 'Đạt'); assert.equal(busy, false);
   assert.equal(env.roots.length, 0, 'no badge, debug panel or replacement canvas is injected');
+  const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
+  assert.equal(report.extensionVersion, '1.4.4');
+  assert.equal(audioPreloads, 1); assert.equal(report.moduleLink.audioWarmup.phase, 'preload_requested');
+  assert.equal(report.motion.spin, 1); assert.equal(report.motion.firstTickDelayMs, 0);
+  assert.doesNotMatch(JSON.stringify(report.motion), /Hoàng|Huy|Đạt|Vinh/);
   component.exposed.spin(); assert.equal(busy, true);
   await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Đạt' } }); await env.flush();
   assert.equal(busy, false); assert.equal(env.roots.length, 0);

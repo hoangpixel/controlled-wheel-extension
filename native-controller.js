@@ -102,9 +102,8 @@
       catch (failure) { abort(failure.message); options.onCancel?.(); return; }
       if (wheel.isSpinning()) { error = "Vòng quay đang chạy."; sample(true); return; }
       const previousState = wheel.state;
-      const started = clock();
       const duration = options.reducedMotion?.() ? 900 : Math.max(1000, Math.min(20000, (Number(wheel.wheelConfig?.spinTime) || 5) * 1000));
-      active = { previousState, started, duration, start: wheel.angle, end: next.end, fingerprint: fingerprint(), targetIndex: next.targetIndex, targetName: next.targetName };
+      active = { previousState, started: null, duration, start: wheel.angle, end: next.end, fingerprint: fingerprint(), targetIndex: next.targetIndex, targetName: next.targetName };
       result = ""; error = "";
       wheel.speed = 0;
       wheel.nameChangedCallback = nameChanged;
@@ -114,7 +113,9 @@
         tick() {
           if (!active) return;
           if (fingerprint() !== active.fingerprint) { abort("Đã hủy: danh sách gốc thay đổi."); return; }
-          const progress = Math.min(1, (clock() - active.started) / active.duration);
+          const time = clock();
+          if (active.started === null) active.started = time;
+          const progress = Math.max(0, Math.min(1, (time - active.started) / active.duration));
           wheel.speed = 0;
           wheel.angle = Core.wrap(active.start + (active.end - active.start) * (1 - Math.pow(1 - progress, 4)));
           sample();

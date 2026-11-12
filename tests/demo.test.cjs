@@ -49,6 +49,7 @@ test('native adapter: 72 spins after reorder/target changes use actual engine en
       for (let repeat = 0; repeat < 4; repeat++) {
         let result, callbacks = 0;
         wheel.click(() => {}, entry => { result = entry; callbacks++; });
+        wheel.tick(); // Establish the first renderer tick before advancing time.
         now += 500; wheel.tick();
         assert.equal(callbacks, 0); assert.equal(wheel.isSpinning(), true);
         now += 5000; wheel.tick(); wheel.tick();
@@ -110,6 +111,7 @@ test('engine movement after state.tick is checked before publishing a native res
   const control = Native.attach(wheel, { now: () => now });
   control.configure({ enabled: true, target: 'Huy' });
   wheel.click(() => {}, () => called++);
+  wheel.tick();
   now = 5000; wheel.tick();
   assert.equal(called, 0);
   assert.match(control.status().error, /không khớp/);
@@ -134,7 +136,7 @@ async function boot(config = { enabled: true, target: 'Huy' }, supported = true)
   if (supported === true) env.wheelContainer.__vue__ = instance;
   if (supported === 'vue3') env.main.__vue_app__ = { _instance: { subTree: { children: [{ component: { data: { renamedEngine: { model: wheel } }, proxy: instance } }] } } };
   env.nativeSpin.addEventListener('click', () => instance.spin());
-  ['wheel-core.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
+  ['wheel-core.js','native-motion-v440.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
   ['wheel-core.js','page-reader.js','content.js'].forEach(file => env.load(file));
   await env.flush();
   return Object.assign(env, { wheel, instance, getResult: () => result, getBusy: () => busy });
@@ -147,7 +149,7 @@ test('two-world bridge: native control publishes site result, creates no second 
   assert.equal(env.roots.length, 0, 'content script must not inject a badge or other UI');
   assert.deepEqual(env.doc.body.children, [env.main]);
   assert.deepEqual(env.main.children, [env.wheelContainer, env.editor]);
-  await env.nativeSpin.fire('click'); env.advance(500); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
+  await env.nativeSpin.fire('click'); env.wheel.tick(); env.advance(500); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult()?.text, 'Huy'); assert.equal(env.getBusy(), false);
   assert.equal(env.roots.length, 0);
   await env.chrome.storage.local.set({ fixedWinnerDemo: { enabled: false, target: 'Huy' } }); await env.flush();
@@ -171,7 +173,7 @@ test('Vue 3 root subtrees and renamed nested engine fields can connect', async (
   const env = await boot({ enabled: true, target: 'Đạt' }, 'vue3');
   const status = await env.request('FWD_STATUS');
   assert.equal(status.supported, true);
-  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  await env.nativeSpin.fire('click'); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult().text, 'Đạt');
 });
 
@@ -182,12 +184,12 @@ test('production VNode roots find the wheel beyond 400 unrelated nodes instead o
   env.main._vnode = { component: { data: {}, subTree: { el: env.main, children: [...noisy, wheelNode] } } };
   assert.equal((await env.request('FWD_STATUS')).supported, true);
   const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
-  assert.equal(report.extensionVersion, '1.4.1');
+  assert.equal(report.extensionVersion, '1.4.4');
   assert.equal(report.scanTruncated, false);
   assert.ok(report.componentCount <= 3);
   assert.ok(report.vnodeCount < 10);
   assert.ok(report.rootSources.includes('_vnode'));
-  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  await env.nativeSpin.fire('click'); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult().text, 'Huy');
 });
 
@@ -247,7 +249,7 @@ test('popup resolves a short name to the full entry and reports ambiguity after 
   assert.equal(env.storage.fixedWinnerDemo.target, 'an');
   assert.equal((await env.request('FWD_STATUS')).targetName, 'Nguyễn Văn An');
   assert.equal(env.elements.get('matched-name').textContent, 'Khớp Entries: Nguyễn Văn An');
-  await env.nativeSpin.fire('click'); env.advance(5000); env.wheel.tick(); await env.flush();
+  await env.nativeSpin.fire('click'); env.wheel.tick(); env.advance(5000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult().text, 'Nguyễn Văn An');
   env.wheel.setEntries([{ text: 'Trần Đức An' }, { text: 'Nguyễn Văn An' }]);
   const status = await env.request('FWD_STATUS');
@@ -261,7 +263,7 @@ test('popup resolves a short name to the full entry and reports ambiguity after 
   env.elements.get('winner').value = 'văn an';
   await env.elements.get('winner-form').fire('submit'); await env.flush();
   assert.equal(env.elements.get('matched-name').textContent, 'Khớp Entries: Nguyễn Văn An');
-  await env.nativeSpin.fire('click'); env.advance(10000); env.wheel.tick(); await env.flush();
+  await env.nativeSpin.fire('click'); env.wheel.tick(); env.advance(10000); env.wheel.tick(); await env.flush();
   assert.equal(env.getResult().text, 'Nguyễn Văn An');
 });
 

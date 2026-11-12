@@ -9,6 +9,7 @@
     const schedule = options.microtask || (fn => queueMicrotask(fn));
     let hosts = [], generation = 0, restoreDraw = null, timeout = null;
     let state = { phase: "idle", error: "" };
+    let audioWarmup = { phase: "idle" };
     const captured = new Map(), namespaces = new Map();
     const raw = value => value?.__v_raw || value;
     const publish = next => { state = next; onChange(); };
@@ -66,6 +67,26 @@
       clearTimeout(timeout); timeout = null;
       if (restoreDraw) { const restore = restoreDraw; restoreDraw = null; restore(); }
     }
+    async function preloadAudio(engineURL, token) {
+      // The page imports this utility itself. Its l export only preloads Howls
+      // (no autoplay); warming it here avoids their first allocation inside tick.
+      const url = new URL("./WheelConfigUtil-v440.js", engineURL).href;
+      if (!resources().some(entry => entry.name === url)) { audioWarmup = { phase: "not_observed" }; return; }
+      try {
+        if (!namespaces.has(url)) namespaces.set(url, Promise.resolve().then(() => loadModule(url)));
+        const namespace = await namespaces.get(url);
+        if (token !== generation) return;
+        if (typeof namespace.l !== "function") { audioWarmup = { phase: "unsupported" }; return; }
+        const config = hosts[0]?.component?.props?.wheelConfig;
+        if (!config) return;
+        const now = options.now || (() => performance.now());
+        const started = now();
+        namespace.l(config.duringSpinSound, config.afterSpinSound);
+        audioWarmup = { phase: "preload_requested", durationMs: Math.max(0, now() - started) };
+      } catch (error) {
+        if (token === generation) audioWarmup = { phase: "error", error: error.message };
+      }
+    }
     function ensure(nextHosts) {
       hosts = nextHosts;
       if (!hosts.length || get(hosts) || ["loading_module", "waiting_draw"].includes(state.phase)) return;
@@ -77,13 +98,15 @@
       // A mounted SpinningWheel and an observed exact module URL are both required.
       // This requests the namespace of that same module from the page's module map.
       if (!namespaces.has(url)) namespaces.set(url, Promise.resolve().then(() => loadModule(url)));
-      namespaces.get(url).then(namespace => {
+      namespaces.get(url).then(async namespace => {
         if (token !== generation) return;
         const Engine = namespace.t;
         const prototype = Engine?.prototype;
         if (!prototype || !["draw", "tick", "click", "configure", "getEntryAtAngle", "getDisplayEntries"].every(key => typeof prototype[key] === "function")) {
           throw new Error("Export của module không khớp class engine bản 440 đã kiểm tra.");
         }
+        await preloadAudio(url, token);
+        if (token !== generation) return;
         const descriptor = Object.getOwnPropertyDescriptor(prototype, "draw");
         const original = prototype.draw;
         function draw(context) {
@@ -116,8 +139,8 @@
       });
     }
     return {
-      ensure, get, status: () => ({ ...state }),
-      cancel() { generation++; clearHook(); captured.clear(); hosts = []; state = { phase: "idle", error: "" }; }
+      ensure, get, status: () => ({ ...state, audioWarmup: { ...audioWarmup } }),
+      cancel() { generation++; clearHook(); captured.clear(); hosts = []; state = { phase: "idle", error: "" }; audioWarmup = { phase: "idle" }; }
     };
   }
   root.FixedWinnerModuleLink = Object.freeze({ create });
