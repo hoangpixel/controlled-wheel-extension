@@ -46,7 +46,7 @@ class Element {
   focus() {}
   showModal() { this.open = true; }
   close() { this.open = false; }
-  getContext() { return new Proxy({}, { get: (_, prop) => prop === 'measureText' ? () => ({ width: 10 }) : () => {}, set: () => true }); }
+  getContext() { return new Proxy({ canvas: this, frames: [] }, { get: (target, prop) => prop in target ? target[prop] : prop === 'measureText' ? () => ({ width: 10 }) : () => {}, set: (target, prop, value) => { target[prop] = value; return true; } }); }
   attachShadow() {
     const nodes = new Map();
     this.shadowRoot = { markup: '', set innerHTML(value) { this.markup = value; }, querySelector(selector) {
@@ -83,6 +83,7 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
   const raf = new Map(); let frameId = 0;
   const intervals = new Map(); let intervalId = 0;
   let now = 0;
+  const resourceEntries = [];
   const windowHandlers = {};
   const location = { origin: 'https://wheelofnames.com' };
   const browserWindow = {
@@ -109,25 +110,29 @@ function environment(stored = {}, names = 'Hoàng\nHuy\nĐạt') {
     tabs: { async query() { return [{ id: 1 }]; }, async sendMessage(_id, msg) { return request(msg.type); } }
   };
   const shared = {
-    console, document: doc, chrome, setTimeout, clearTimeout,
+    console, document: doc, chrome, setTimeout, clearTimeout, queueMicrotask, URL,
     setInterval(fn) { intervals.set(++intervalId, fn); return intervalId; },
     clearInterval(id) { intervals.delete(id); },
     requestAnimationFrame(fn) { raf.set(++frameId, fn); return frameId; },
     cancelAnimationFrame(id) { raf.delete(id); },
     MutationObserver: class { observe() {} disconnect() {} },
     matchMedia: () => ({ matches: false }),
-    window: browserWindow, location, performance: { now: () => now }
+    window: browserWindow, location, performance: { now: () => now, getEntriesByType: () => resourceEntries }
   };
   const context = vm.createContext(shared);
   const pageContext = vm.createContext({ ...shared, chrome: undefined });
   function load(file, world = 'isolated') { vm.runInContext(fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), world === 'page' ? pageContext : context, { filename: file }); }
+  function mockModuleLoader(loader) {
+    pageContext.__moduleLoaderForTests = loader;
+    vm.runInContext('var originalModuleAPI = FixedWinnerModuleLink; globalThis.FixedWinnerModuleLink = { create(options) { return originalModuleAPI.create({ ...options, loadModule: __moduleLoaderForTests }); } };', pageContext);
+  }
   function request(type) { return new Promise(resolve => receiver({ type }, {}, resolve)); }
   async function flush() { for (let i = 0; i < 8; i++) await new Promise(resolve => setImmediate(resolve)); }
   function advance(time) {
     now = time;
     const callbacks = [...raf.values()]; raf.clear(); callbacks.forEach(fn => fn(time));
   }
-  return { load, request, flush, advance, chrome, storage, doc, editor, roots, elements, raf, intervals, docHandlers, main, wheelContainer, nativeCanvas, nativeSpin, windowHandlers,
+  return { load, request, flush, advance, mockModuleLoader, resourceEntries, chrome, storage, doc, editor, roots, elements, raf, intervals, docHandlers, main, wheelContainer, nativeCanvas, nativeSpin, windowHandlers,
     get ui() { return roots.at(-1)?.shadowRoot; } };
 }
 module.exports = { Element, environment };

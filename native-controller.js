@@ -4,17 +4,20 @@
   const Core = root.WheelDemoCore || (typeof require === "function" ? require("./wheel-core.js") : null);
   const text = (entry) => Core.normalizeName(typeof entry === "string" ? entry : entry?.text);
   function compatible(wheel) {
+    if (root.FixedWinnerNative440?.compatible(wheel)) return true;
     return wheel && Number.isFinite(wheel.angle) && Number.isFinite(wheel.speed) &&
       ["click", "tick", "setEntries", "configure", "getIndexAtPointer", "getEntryAtPointer", "isSpinning", "spinIsDone", "refresh"].every(key => typeof wheel[key] === "function") &&
       typeof wheel.entryPicker?.getDisplayEntries === "function" && typeof wheel.entryPicker?.getAllEntries === "function" &&
       ["tick", "click", "drawThisFrame", "isSpinning"].every(key => typeof wheel.state?.[key] === "function");
   }
   function inspect(wheel, target) {
+    if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.inspect(wheel, target);
     const entries = wheel.entryPicker.getDisplayEntries();
     const names = entries.map(text);
     return { names, targetIndex: Core.findTarget(names, target), angle: Core.wrap(wheel.angle), pointerIndex: wheel.getIndexAtPointer(), pointerName: text(wheel.getEntryAtPointer()) };
   }
   function plan(wheel, target) {
+    if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.plan(wheel, target);
     const state = inspect(wheel, target);
     const entries = wheel.entryPicker.getDisplayEntries();
     if (!entries.length) throw new Error("Danh sách vòng quay gốc đang trống.");
@@ -39,6 +42,7 @@
     return { ...state, end: wheel.angle + 6 * Core.TAU + Core.wrap(stop - Core.wrap(wheel.angle)) };
   }
   function attach(wheel, options = {}) {
+    if (root.FixedWinnerNative440?.compatible(wheel)) return root.FixedWinnerNative440.attach(wheel, options);
     if (!compatible(wheel)) throw new Error("Không nhận diện được engine vòng quay tương thích.");
     if (wheel.isSpinning()) throw new Error("Vòng quay đang chạy. Đợi lượt hiện tại kết thúc rồi thử lại.");
     let config = { enabled: true, target: "" }, active = null, disposed = false;

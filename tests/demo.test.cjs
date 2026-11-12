@@ -132,7 +132,7 @@ async function boot(config = { enabled: true, target: 'Huy' }, supported = true)
   if (supported === true) env.wheelContainer.__vue__ = instance;
   if (supported === 'vue3') env.main.__vue_app__ = { _instance: { subTree: { children: [{ component: { data: { renamedEngine: { model: wheel } }, proxy: instance } }] } } };
   env.nativeSpin.addEventListener('click', () => instance.spin());
-  ['wheel-core.js','native-controller.js','native-discovery.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
+  ['wheel-core.js','native-controller-v440.js','native-controller.js','native-discovery.js','native-module-link.js','page-bridge.js'].forEach(file => env.load(file, 'page'));
   ['wheel-core.js','page-reader.js','content.js'].forEach(file => env.load(file));
   await env.flush();
   return Object.assign(env, { wheel, instance, getResult: () => result, getBusy: () => busy });
@@ -182,7 +182,7 @@ test('production VNode roots find the wheel beyond 400 unrelated nodes instead o
   env.main._vnode = { component: { data: {}, subTree: { el: env.main, children: [...noisy, wheelNode] } } };
   assert.equal((await env.request('FWD_STATUS')).supported, true);
   const report = (await env.request('FWD_DIAGNOSTICS')).diagnostics;
-  assert.equal(report.extensionVersion, '1.2.2');
+  assert.equal(report.extensionVersion, '1.3.0');
   assert.equal(report.scanTruncated, false);
   assert.ok(report.componentCount <= 3);
   assert.ok(report.vnodeCount < 10);

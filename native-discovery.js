@@ -7,6 +7,7 @@
     const report = { visibleCanvasCount: canvases.length, vue2Nodes: 0, vue3Nodes: 0,
       componentCount: 0, vnodeCount: 0, scanTruncated: false, rootSources: [], stateKeys: [], componentSummaries: [], candidates: [] };
     const sources = new Set();
+    const hosts = [];
     const object = value => value && typeof value === "object";
     const element = value => value?.nodeType === 1 || typeof value?.tagName === "string";
     const inBranch = (value, canvas) => !element(value) || value === canvas || value.contains(canvas);
@@ -48,6 +49,9 @@
         if (!inBranch(instance.$el || value.vnode?.el, canvas)) continue;
         if (seenComponents.size >= 256) { report.scanTruncated = true; continue; }
         seenComponents.add(value); report.componentCount++;
+        if ((value.type?.__name || value.type?.name) === "SpinningWheel" && Array.isArray(value.props?.wheelConfig?.entries) && typeof value.exposed?.spin === "function") {
+          hosts.push({ canvas, component: value, instance, wheelConfig: value.props.wheelConfig });
+        }
         const dataViews = [...new Set([instance.$data, instance._data, value.data, value.setupState, value.exposed, value.ctx].filter(object))];
         if (report.componentSummaries.length < 16) {
           report.componentSummaries.push({ name: value.type?.name || value.type?.__name || instance.$options?.name || "anonymous",
@@ -75,7 +79,7 @@
           if (adapter.compatible(candidate)) {
             report.rootSources = [...sources];
             report.reason = "compatible_engine_found";
-            return { binding: { canvas, wheel: candidate, instance }, report };
+            return { binding: { canvas, wheel: candidate, instance, component: value }, report, hosts };
           }
           if (item.depth < 2) {
             for (const key of Object.keys(candidate).filter(key => key !== "_" && !key.startsWith("$") && !key.startsWith("__")).slice(0, 40)) {
@@ -91,7 +95,7 @@
     }
     report.rootSources = [...sources];
     report.reason = !canvases.length ? "no_visible_canvas" : report.scanTruncated ? "scan_limit_reached" : !report.componentCount ? "no_accessible_component" : !report.candidates.length ? "no_engine_in_accessible_state" : "engine_contract_mismatch";
-    return { binding: null, report };
+    return { binding: null, report, hosts };
   }
   root.FixedWinnerDiscovery = Object.freeze({ find });
   if (typeof module !== "undefined" && module.exports) module.exports = root.FixedWinnerDiscovery;

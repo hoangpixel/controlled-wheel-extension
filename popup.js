@@ -3,6 +3,7 @@
   const $ = (id) => document.getElementById(id);
   let config = { enabled: false, target: "" };
   let busy = false;
+  let statusPoll = null, polling = false, connectionWarning = false;
   function message(text, kind = "info") { $("message").textContent = text; $("message").dataset.kind = kind; }
   function render() {
     $("enabled").checked = config.enabled;
@@ -11,6 +12,17 @@
     $("enabled").disabled = busy;
     $("winner").disabled = busy;
     $("save").disabled = busy;
+    if (config.enabled && !statusPoll) {
+      statusPoll = setInterval(async () => {
+        if (busy || polling) return;
+        polling = true;
+        try {
+          const warning = await check();
+          if (warning) { connectionWarning = true; message(warning.text, warning.kind); }
+          else if (connectionWarning) { connectionWarning = false; message("Đã kết nối vòng quay gốc.", "success"); }
+        } finally { polling = false; }
+      }, 1000);
+    } else if (!config.enabled && statusPoll) { clearInterval(statusPoll); statusPoll = null; }
   }
   async function send(type) {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -47,6 +59,7 @@
       config = next;
       render();
       const warning = await check();
+      connectionWarning = Boolean(warning);
       message(warning ? `${success} ${warning.text}` : success, warning?.kind || "success");
     } catch (error) { message(`Không lưu được cấu hình: ${error.message}`, "error"); }
     finally { busy = false; render(); }
@@ -82,6 +95,7 @@
       config = { enabled: stored?.enabled === true, target: WheelDemoCore.normalizeName(stored?.target) };
       $("winner").value = config.target;
       const warning = await check();
+      connectionWarning = Boolean(warning);
       if (warning) message(warning.text, warning.kind);
     } catch (error) { message(`Không đọc được cấu hình: ${error.message}`, "error"); }
     finally { busy = false; render(); }
